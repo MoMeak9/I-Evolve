@@ -1,0 +1,21 @@
+{
+  "name": "@i-evolve/ai-evolution",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@i-evolve/shared": "workspace:*",
+    "@i-evolve/core": "workspace:*",
+    "@i-evolve/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsup": "^8.4.0"
+  }
+}

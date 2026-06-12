@@ -1,21 +1,18 @@
 {
-  "name": "@i-evolve/cli",
+  "name": "@i-evolve/git-sync",
   "version": "0.0.0",
   "type": "module",
-  "bin": {
-    "i-evolve": "./dist/index.js"
+  "exports": {
+    ".": "./src/index.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@i-evolve/ai-evolution": "workspace:*",
-    "@i-evolve/core": "workspace:*",
-    "@i-evolve/daemon": "workspace:*",
-    "@i-evolve/git-sync": "workspace:*",
-    "@i-evolve/schema": "workspace:*",
     "@i-evolve/shared": "workspace:*",
+    "@i-evolve/core": "workspace:*",
+    "@i-evolve/schema": "workspace:*",
     "@i-evolve/storage": "workspace:*"
   },
   "devDependencies": {

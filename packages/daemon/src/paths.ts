@@ -23,6 +23,9 @@ function buildPaths(baseDir: string) {
       dir: join(baseDir, 'logs'),
       daemon: join(baseDir, 'logs', 'daemon.log'),
     },
+    sessions: {
+      dir: join(baseDir, 'sessions'),
+    },
     shared: {
       dir: join(baseDir, 'shared'),
       memory: join(baseDir, 'shared', 'memory'),

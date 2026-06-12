@@ -15,6 +15,11 @@ function getRepo() {
 
 export async function handleMemoryCommand(subcommand: string | undefined, args: string[], flags: Record<string, unknown>): Promise<void> {
   switch (subcommand) {
+    case 'remote': {
+      const { handleRemoteCommand } = await import('./remote.js');
+      await handleRemoteCommand(args[0], args.slice(1), flags);
+      break;
+    }
     case 'init-local': {
       const repo = getRepo();
       repo.close();

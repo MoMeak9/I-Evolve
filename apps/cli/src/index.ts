@@ -14,6 +14,22 @@ const { positionals, values } = parseArgs({
     file: { type: 'string' },
     mode: { type: 'string' },
     status: { type: 'string' },
+    session: { type: 'string' },
+    'auto-evolve': { type: 'boolean' },
+    phase: { type: 'string' },
+    source: { type: 'string' },
+    tool: { type: 'string' },
+    summary: { type: 'string' },
+    query: { type: 'string' },
+    format: { type: 'string' },
+    'max-tokens': { type: 'string' },
+    'repo-id': { type: 'string' },
+    'project-id': { type: 'string' },
+    domain: { type: 'string' },
+    message: { type: 'string' },
+    'to-commit': { type: 'string' },
+    to: { type: 'string' },
+    'dry-run': { type: 'boolean' },
   },
 });
 
@@ -44,7 +60,19 @@ if (command === 'daemon') {
   await handleDaemonCommand(subcommand, { foreground: values.foreground ?? false });
 } else if (command === 'observe') {
   const { handleObserve } = await import('./commands/observe.js');
-  await handleObserve(rest[0]);
+  await handleObserve(rest[0], {
+    phase: values.phase,
+    source: values.source,
+    tool: values.tool,
+    summary: values.summary,
+    sessionId: values.session,
+  });
+} else if (command === 'inject') {
+  const { handleInject } = await import('./commands/inject.js');
+  await handleInject(values);
+} else if (command === 'session') {
+  const { handleSessionCommand } = await import('./commands/session.js');
+  await handleSessionCommand(subcommand, values);
 } else if (command === 'repair' && subcommand === 'stale-lock') {
   const { ProcessLock } = await import('@i-evolve/daemon');
   const lock = new ProcessLock();
@@ -56,6 +84,15 @@ if (command === 'daemon') {
 } else if (command === 'index') {
   const { handleIndexCommand } = await import('./commands/memory.js');
   await handleIndexCommand(subcommand);
+} else if (command === 'evolve') {
+  const { handleEvolveCommand } = await import('./commands/evolve.js');
+  await handleEvolveCommand(subcommand, values);
+} else if (command === 'audit') {
+  const { handleAuditCommand } = await import('./commands/evolve.js');
+  await handleAuditCommand(subcommand, rest);
+} else if (command === 'migrate') {
+  const { handleMigrateCommand } = await import('./commands/migrate.js');
+  await handleMigrateCommand(subcommand, values);
 } else if (command === 'schema' && subcommand === 'validate') {
   const file = rest[0];
   if (!file) {
