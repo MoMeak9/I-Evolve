@@ -10,6 +10,10 @@ const { positionals, values } = parseArgs({
     version: { type: 'boolean', short: 'v' },
     help: { type: 'boolean', short: 'h' },
     bootstrap: { type: 'boolean' },
+    foreground: { type: 'boolean' },
+    file: { type: 'string' },
+    mode: { type: 'string' },
+    status: { type: 'string' },
   },
 });
 
@@ -24,13 +28,35 @@ if (values.help || !command) {
   console.log(`Usage: i-evolve <command> [options]
 
 Commands:
-  schema validate <file>   Validate a YAML/JSON file against its schema
-  schema print <name>      Print a JSON schema (memory | observation | audit-action)
-  doctor --bootstrap       Check system health`);
+  daemon start [--foreground]  Start the daemon
+  daemon stop                  Stop the daemon
+  daemon status                Show daemon status
+  observe <json>               Append an observation (requires daemon)
+  schema validate <file>       Validate a YAML/JSON file against its schema
+  schema print <name>          Print a JSON schema (memory | observation | audit-action)
+  doctor --bootstrap           Check system health
+  repair stale-lock            Remove stale daemon lock`);
   process.exit(0);
 }
 
-if (command === 'schema' && subcommand === 'validate') {
+if (command === 'daemon') {
+  const { handleDaemonCommand } = await import('./commands/daemon.js');
+  await handleDaemonCommand(subcommand, { foreground: values.foreground ?? false });
+} else if (command === 'observe') {
+  const { handleObserve } = await import('./commands/observe.js');
+  await handleObserve(rest[0]);
+} else if (command === 'repair' && subcommand === 'stale-lock') {
+  const { ProcessLock } = await import('@i-evolve/daemon');
+  const lock = new ProcessLock();
+  lock.repair();
+  console.log('Stale lock removed.');
+} else if (command === 'memory') {
+  const { handleMemoryCommand } = await import('./commands/memory.js');
+  await handleMemoryCommand(subcommand, rest, values);
+} else if (command === 'index') {
+  const { handleIndexCommand } = await import('./commands/memory.js');
+  await handleIndexCommand(subcommand);
+} else if (command === 'schema' && subcommand === 'validate') {
   const file = rest[0];
   if (!file) {
     console.error('Error: file path required');
@@ -86,11 +112,23 @@ if (command === 'schema' && subcommand === 'validate') {
   }
   console.log(JSON.stringify(schemas[name], null, 2));
 } else if (command === 'doctor') {
+  const { sendRequest, paths } = await import('@i-evolve/daemon');
   console.log('i-evolve doctor');
   console.log('  Node.js:', process.version);
   console.log('  Platform:', process.platform);
+  console.log('  Data dir:', paths.base);
+
+  try {
+    const resp = await sendRequest({ type: 'health' });
+    if (resp.ok) {
+      console.log('  Daemon: running (pid', (resp.data as any).pid, ')');
+    }
+  } catch {
+    console.log('  Daemon: not running');
+  }
+
   if (values.bootstrap) {
-    console.log('  Bootstrap: OK (nothing to do in MVP0)');
+    console.log('  Bootstrap: OK');
   }
 } else {
   console.error(`Unknown command: ${command} ${subcommand ?? ''}`);

@@ -7,6 +7,7 @@ describe('validateMemory', () => {
     type: 'project_fact',
     scope: 'project',
     project_id: 'test-project',
+    title: 'Test Memory',
     status: 'active',
     visibility: 'team',
     confidence: 0.85,
