@@ -1,0 +1,20 @@
+{
+  "name": "@i-evolve/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "i-evolve": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@i-evolve/schema": "workspace:*",
+    "@i-evolve/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsup": "^8.4.0"
+  }
+}

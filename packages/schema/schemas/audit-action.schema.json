@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://i-evolve.dev/schemas/audit-action.schema.json",
+  "title": "AuditAction",
+  "description": "I-Evolve Audit Action schema",
+  "type": "object",
+  "required": ["id", "memory_id", "action", "actor_type", "actor_id", "reason", "confidence", "source_refs", "policy_checks", "created_at"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "memory_id": { "type": "string", "minLength": 1 },
+    "action": {
+      "type": "string",
+      "enum": ["propose", "ai_approve", "ai_reject", "activate", "deprecate", "supersede", "forget", "rollback", "scope_downgrade", "confidence_update"]
+    },
+    "actor_type": {
+      "type": "string",
+      "enum": ["ai", "user", "system"]
+    },
+    "actor_id": { "type": "string", "minLength": 1 },
+    "reason": { "type": "string", "minLength": 1 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "before_hash": { "type": "string" },
+    "after_hash": { "type": "string" },
+    "source_refs": { "type": "array", "items": { "type": "string" } },
+    "policy_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["policy", "passed"],
+        "properties": {
+          "policy": { "type": "string" },
+          "passed": { "type": "boolean" },
+          "reason": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

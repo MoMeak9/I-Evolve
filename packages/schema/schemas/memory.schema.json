@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://i-evolve.dev/schemas/memory.schema.json",
+  "title": "Memory",
+  "description": "I-Evolve Memory frontmatter schema (snake_case)",
+  "type": "object",
+  "required": ["id", "type", "scope", "status", "confidence", "revision", "content_hash", "created_at", "updated_at"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": {
+      "type": "string",
+      "enum": ["user_preference", "project_fact", "repo_fact", "task_constraint", "decision", "pitfall", "workflow_rule"]
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["global", "domain", "project", "repo", "task", "user"]
+    },
+    "repo_id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "domain": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["candidate", "active", "rejected", "deprecated", "superseded"]
+    },
+    "visibility": {
+      "type": "string",
+      "enum": ["private", "team", "public"],
+      "default": "private"
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "ttl_days": { "type": ["integer", "null"], "minimum": 1 },
+    "expires_at": { "type": ["string", "null"], "format": "date-time" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "content_hash": { "type": "string", "pattern": "^sha256:" },
+    "source_git_commit": { "type": "string" },
+    "source_refs": { "type": "array", "items": { "type": "string" } },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "applies_to": {
+      "type": "object",
+      "properties": {
+        "repo_patterns": { "type": "array", "items": { "type": "string" } },
+        "package_names": { "type": "array", "items": { "type": "string" } },
+        "path_patterns": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "supersedes": { "type": "array", "items": { "type": "string" } },
+    "deprecated_by": { "type": ["string", "null"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": { "properties": { "scope": { "const": "project" } } },
+      "then": { "required": ["project_id"] }
+    },
+    {
+      "if": { "properties": { "scope": { "const": "repo" } } },
+      "then": { "required": ["repo_id"] }
+    },
+    {
+      "if": { "properties": { "scope": { "const": "domain" } } },
+      "then": { "required": ["domain"] }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@i-evolve/repository",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@i-evolve/shared": "workspace:*",
+    "@i-evolve/core": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsup": "^8.4.0"
+  }
+}
