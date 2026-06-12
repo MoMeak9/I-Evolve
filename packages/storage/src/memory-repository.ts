@@ -48,14 +48,18 @@ export class MarkdownMemoryRepository {
 
   search(query: string): Array<{ memory: MemoryItem; rank: number }> {
     const results = this.index.search(query, { status: 'active' });
+    const now = Date.now();
     return results.map((r) => {
       const memory = this.get(r.memory_id);
       if (!memory) return null;
+      if (this.isExpired(memory, now)) return null;
       return { memory, rank: r.rank };
     }).filter(Boolean) as Array<{ memory: MemoryItem; rank: number }>;
   }
 
   create(input: Omit<MemoryItem, 'revision' | 'contentHash' | 'createdAt' | 'updatedAt'> & { content: string }): MemoryItem {
+    this.assertNotTombstoned(input.id);
+
     const now = new Date().toISOString();
     const contentHash = computeContentHash(input.content);
 
@@ -170,6 +174,11 @@ export class MarkdownMemoryRepository {
             const { frontmatter, content } = parseMemoryFile(fullPath);
             const camel = mapKeysSnakeToCamel(frontmatter) as unknown as MemoryItem;
             const memory = { ...camel, content };
+            const validation = validateMemory(frontmatter);
+            if (!validation.valid) {
+              errors++;
+              continue;
+            }
             this.index.upsertMemory(memory, fullPath, content);
             total++;
           } catch {
@@ -208,5 +217,20 @@ export class MarkdownMemoryRepository {
   private toFrontmatterObj(memory: MemoryItem): Record<string, unknown> {
     const { content, ...fm } = memory as any;
     return fm;
+  }
+
+  private tombstonePath(id: string): string {
+    return join(this.memoryDir, 'tombstones', `${id}.md`);
+  }
+
+  private assertNotTombstoned(id: string): void {
+    if (existsSync(this.tombstonePath(id))) {
+      throw new Error(`Memory id is tombstoned and cannot be reused: ${id}`);
+    }
+  }
+
+  private isExpired(memory: MemoryItem, now: number): boolean {
+    if (!memory.expiresAt) return false;
+    return Date.parse(memory.expiresAt) <= now;
   }
 }

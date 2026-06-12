@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, rmSync, mkdirSync } from 'node:fs';
+import { existsSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { MarkdownMemoryRepository } from './memory-repository.js';
@@ -122,6 +122,21 @@ describe('MarkdownMemoryRepository', () => {
     expect(results.length).toBe(0);
   });
 
+  it('expired active memory not returned by search', () => {
+    repo.create({
+      ...makeInput(),
+      expiresAt: '2020-01-01T00:00:00.000Z',
+    });
+    const results = repo.search('test memory');
+    expect(results.length).toBe(0);
+  });
+
+  it('rejects recreating a tombstoned memory id', () => {
+    const memory = repo.create(makeInput());
+    repo.forget(memory.id, 'tombstone');
+    expect(() => repo.create(makeInput())).toThrow(/tombstone/i);
+  });
+
   it('rebuildIndex restores from markdown files', () => {
     repo.create(makeInput());
     repo.create({
@@ -138,6 +153,36 @@ describe('MarkdownMemoryRepository', () => {
 
     const results = repo.search('test');
     expect(results.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('rebuildIndex skips invalid markdown files', () => {
+    repo.create(makeInput());
+    const badDir = join(memoryDir, 'projects', 'bad');
+    mkdirSync(badDir, { recursive: true });
+    writeFileSync(join(badDir, 'bad.md'), [
+      '---',
+      'id: project.bad.invalid',
+      'type: project_fact',
+      'scope: project',
+      'project_id: bad',
+      'title: Invalid',
+      'status: active',
+      'visibility: team',
+      'confidence: 2',
+      'revision: 1',
+      'content_hash: sha256:bad',
+      'created_at: 2026-06-12T10:00:00.000Z',
+      'updated_at: 2026-06-12T10:00:00.000Z',
+      '---',
+      '',
+      'Invalid memory.',
+      '',
+    ].join('\n'), 'utf-8');
+
+    const { total, errors } = repo.rebuildIndex();
+    expect(total).toBe(1);
+    expect(errors).toBe(1);
+    expect(repo.get('project.bad.invalid')).toBeNull();
   });
 
   it('atomic write does not leave partial files on validation failure', () => {

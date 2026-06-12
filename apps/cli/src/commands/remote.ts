@@ -1,6 +1,7 @@
-import { join } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { paths } from '@i-evolve/daemon';
+import type { AuditAction } from '@i-evolve/core';
 import { GitMemorySync } from '@i-evolve/git-sync';
 import { MarkdownMemoryRepository } from '@i-evolve/storage';
 
@@ -16,6 +17,20 @@ function rebuildIndexAfterGitChange(): void {
   const { total, errors } = repo.rebuildIndex();
   repo.close();
   console.log(`Index rebuilt: ${total} memories, ${errors} errors.`);
+}
+
+function appendSyncAudit(action: AuditAction): void {
+  const dir = dirname(paths.audit.current);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const line = JSON.stringify(action) + '\n';
+  appendFileSync(paths.audit.current, line, 'utf-8');
+}
+
+function gitChangeHooks() {
+  return {
+    rebuildIndex: rebuildIndexAfterGitChange,
+    appendAudit: appendSyncAudit,
+  };
 }
 
 export async function handleRemoteCommand(subcommand: string | undefined, args: string[], flags: Record<string, unknown>): Promise<void> {
@@ -39,14 +54,13 @@ export async function handleRemoteCommand(subcommand: string | undefined, args: 
       break;
     }
     case 'pull': {
-      const result = await getSync().pull();
+      const result = await getSync().pull(gitChangeHooks());
       console.log(result.message);
-      if (result.ok) rebuildIndexAfterGitChange();
-      else process.exit(1);
+      if (!result.ok) process.exit(1);
       break;
     }
     case 'push': {
-      const result = await getSync().push();
+      const result = await getSync().push({ appendAudit: appendSyncAudit });
       console.log(result.message);
       if (!result.ok) process.exit(1);
       break;
@@ -60,18 +74,16 @@ export async function handleRemoteCommand(subcommand: string | undefined, args: 
     case 'checkout': {
       const ref = args[0];
       if (!ref) { console.error('Error: commit/tag required'); process.exit(1); }
-      const result = await getSync().checkout(ref);
+      const result = await getSync().checkout(ref, gitChangeHooks());
       console.log(result.message);
-      if (result.ok) rebuildIndexAfterGitChange();
       break;
     }
     case 'rollback': {
       const toCommit = flags['to-commit'] as string | undefined;
       if (!toCommit) { console.error('Error: --to-commit required'); process.exit(1); }
       const mode = (flags.mode as 'checkout' | 'revert') ?? 'checkout';
-      const result = await getSync().rollback({ toCommit, mode });
+      const result = await getSync().rollback({ toCommit, mode, ...gitChangeHooks() });
       console.log(result.message);
-      if (result.ok) rebuildIndexAfterGitChange();
       break;
     }
     case 'log': {

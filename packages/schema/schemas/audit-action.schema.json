@@ -10,7 +10,7 @@
     "memory_id": { "type": "string", "minLength": 1 },
     "action": {
       "type": "string",
-      "enum": ["propose", "ai_approve", "ai_reject", "activate", "deprecate", "supersede", "forget", "rollback", "scope_downgrade", "confidence_update"]
+      "enum": ["propose", "ai_approve", "ai_reject", "activate", "deprecate", "supersede", "forget", "rollback", "checkout", "sync_pull", "sync_push", "migrate", "scope_downgrade", "confidence_update"]
     },
     "actor_type": {
       "type": "string",

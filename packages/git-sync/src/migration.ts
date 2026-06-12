@@ -1,5 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { AuditAction } from '@i-evolve/core';
+import { currentCommit, git, isClean } from './git.js';
+import { GitWorkspaceLock } from './workspace-lock.js';
 
 export interface MigrationStep {
   id: string;
@@ -39,6 +42,7 @@ export function getMigrationStatus(repoDir: string, steps: MigrationStep[]): Mig
 export interface RunMigrationOptions {
   to?: number;
   dryRun?: boolean;
+  appendAudit?: (action: AuditAction) => void;
 }
 
 export interface MigrationResult {
@@ -49,7 +53,45 @@ export interface MigrationResult {
   dryRun: boolean;
 }
 
-export function runMigrations(
+export async function runMigrations(
+  repoDir: string,
+  steps: MigrationStep[],
+  options: RunMigrationOptions = {},
+): Promise<MigrationResult> {
+  if (options.dryRun || !existsSync(join(repoDir, '.git'))) {
+    return runMigrationsUnlocked(repoDir, steps, options);
+  }
+
+  const lock = new GitWorkspaceLock(repoDir);
+  return lock.withLock(() => {
+    const before = safeCurrentCommit(repoDir);
+    const result = runMigrationsUnlocked(repoDir, steps, options);
+    if (result.applied.length > 0 && !isClean(repoDir)) {
+      git(repoDir, ['add', '-A']);
+      git(repoDir, ['commit', '-m', `memory(system): migrate schema to ${result.toVersion}`]);
+    }
+    const after = safeCurrentCommit(repoDir);
+    if (result.applied.length > 0) {
+      options.appendAudit?.({
+        id: `audit.${Date.now()}`,
+        memoryId: 'schema.migration',
+        action: 'migrate',
+        actorType: 'system',
+        actorId: 'i-evolve-migration',
+        reason: `Applied schema migrations: ${result.applied.join(', ')}`,
+        confidence: 1,
+        beforeHash: before,
+        afterHash: after,
+        sourceRefs: result.applied,
+        policyChecks: [{ policy: 'git_workspace_lock', passed: true }],
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return result;
+  });
+}
+
+function runMigrationsUnlocked(
   repoDir: string,
   steps: MigrationStep[],
   options: RunMigrationOptions = {},
@@ -80,4 +122,12 @@ export function runMigrations(
   }
 
   return { applied, changedFiles, fromVersion, toVersion, dryRun: options.dryRun ?? false };
+}
+
+function safeCurrentCommit(repoDir: string): string | undefined {
+  try {
+    return currentCommit(repoDir);
+  } catch {
+    return undefined;
+  }
 }

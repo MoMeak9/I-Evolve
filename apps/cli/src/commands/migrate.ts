@@ -20,7 +20,7 @@ export async function handleMigrateCommand(subcommand: string | undefined, flags
     case 'run': {
       const to = flags.to ? parseInt(flags.to as string, 10) : undefined;
       const dryRun = Boolean(flags['dry-run']);
-      const result = runMigrations(repoDir, MIGRATION_STEPS, { to, dryRun });
+      const result = await runMigrations(repoDir, MIGRATION_STEPS, { to, dryRun });
       if (result.applied.length === 0) {
         console.log('No migrations to apply.');
       } else {

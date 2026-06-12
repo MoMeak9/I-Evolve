@@ -51,6 +51,10 @@ export type AuditActionType =
   | 'supersede'
   | 'forget'
   | 'rollback'
+  | 'checkout'
+  | 'sync_pull'
+  | 'sync_push'
+  | 'migrate'
   | 'scope_downgrade'
   | 'confidence_update';
 
