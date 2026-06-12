@@ -13,7 +13,10 @@
     "@i-evolve/shared": "workspace:*",
     "@i-evolve/core": "workspace:*",
     "@i-evolve/schema": "workspace:*",
-    "@i-evolve/repository": "workspace:*"
+    "@i-evolve/repository": "workspace:*",
+    "@i-evolve/storage": "workspace:*",
+    "@i-evolve/git-sync": "workspace:*",
+    "@i-evolve/ai-evolution": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

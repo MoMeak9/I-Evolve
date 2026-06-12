@@ -216,7 +216,7 @@ export class MarkdownMemoryRepository {
 
   private toFrontmatterObj(memory: MemoryItem): Record<string, unknown> {
     const { content, ...fm } = memory as any;
-    return fm;
+    return stripUndefined(fm);
   }
 
   private tombstonePath(id: string): string {
@@ -233,4 +233,8 @@ export class MarkdownMemoryRepository {
     if (!memory.expiresAt) return false;
     return Date.parse(memory.expiresAt) <= now;
   }
+}
+
+function stripUndefined(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }

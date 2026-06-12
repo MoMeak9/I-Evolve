@@ -12,8 +12,10 @@
   "dependencies": {
     "@i-evolve/ai-evolution": "workspace:*",
     "@i-evolve/core": "workspace:*",
+    "@i-evolve/dashboard": "workspace:*",
     "@i-evolve/daemon": "workspace:*",
     "@i-evolve/git-sync": "workspace:*",
+    "@i-evolve/mcp-server": "workspace:*",
     "@i-evolve/schema": "workspace:*",
     "@i-evolve/shared": "workspace:*",
     "@i-evolve/storage": "workspace:*"

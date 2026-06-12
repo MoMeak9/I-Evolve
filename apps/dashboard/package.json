@@ -2,11 +2,16 @@
   "name": "@i-evolve/dashboard",
   "version": "0.0.0",
   "type": "module",
+  "exports": {
+    ".": "./src/main.ts",
+    "./bridge": "./src/bridge.ts"
+  },
   "scripts": {
-    "build": "tsup src/main.ts --format esm",
+    "build": "tsup src/main.ts src/bridge.ts --format esm",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@i-evolve/daemon": "workspace:*",
     "@i-evolve/core": "workspace:*"
   },
   "devDependencies": {

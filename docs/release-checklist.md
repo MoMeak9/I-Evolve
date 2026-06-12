@@ -9,8 +9,11 @@ pnpm build
 pnpm test
 pnpm typecheck
 i-evolve repair verify-hashes
+i-evolve repair audit-log --dry-run
+i-evolve repair git-cleanup --dry-run
 i-evolve migrate run --dry-run
 i-evolve mcp status
+i-evolve dashboard bridge --port 17361
 ```
 
 ## Gates
@@ -21,7 +24,9 @@ i-evolve mcp status
 - Security checks pass for secret and PII validation.
 - Migration dry-run does not write files.
 - MCP server smoke test passes.
+- Dashboard bridge smoke test passes.
 - Claude plugin package files are present.
+- Doctor reports CLI, daemon, store, SQLite/FTS, plugin, MCP, and remote memory status.
 
 ## Memory Versioning
 

@@ -35,7 +35,7 @@ function buildPaths(baseDir: string) {
 
 export type Paths = ReturnType<typeof buildPaths>;
 
-const DEFAULT_BASE = join(homedir(), '.i-evolve');
+const DEFAULT_BASE = process.env.IEVOLVE_BASE_PATH ?? join(homedir(), '.i-evolve');
 
 let _paths: Paths = buildPaths(DEFAULT_BASE);
 

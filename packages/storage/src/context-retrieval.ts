@@ -7,6 +7,7 @@ export interface RetrievalContext {
   domain?: string;
   packageNames?: string[];
   path?: string;
+  query?: string;
   now?: string;
 }
 
@@ -17,6 +18,7 @@ export interface TopKLimits {
   user: number;
   global: number;
   warnings: number;
+  recent: number;
 }
 
 const DEFAULT_LIMITS: TopKLimits = {
@@ -26,6 +28,7 @@ const DEFAULT_LIMITS: TopKLimits = {
   user: 3,
   global: 5,
   warnings: 3,
+  recent: 2,
 };
 
 export interface RetrievedContext {
@@ -35,6 +38,7 @@ export interface RetrievedContext {
   user: MemoryItem[];
   global: MemoryItem[];
   warnings: MemoryItem[];
+  recent: MemoryItem[];
 }
 
 export interface ConflictReport {
@@ -52,6 +56,7 @@ export interface RetrievalDebugStats {
   filteredScopeMismatch: number;
   injected: number;
   suppressedConflicts: number;
+  ftsMatches: number;
 }
 
 export interface RetrievalDebugResult {
@@ -86,7 +91,10 @@ export function retrieveContextDebug(
     filteredScopeMismatch: 0,
     injected: 0,
     suppressedConflicts: 0,
+    ftsMatches: 0,
   };
+  const ftsScores = buildFtsScores(repo, ctx.query);
+  stats.ftsMatches = ftsScores.size;
 
   const eligible: MemoryItem[] = [];
   for (const memory of candidates) {
@@ -105,20 +113,22 @@ export function retrieveContextDebug(
     eligible.push(memory);
   }
 
-  const { selected, conflicts } = suppressConflicts(eligible);
+  const { selected, conflicts } = suppressConflicts(eligible, ftsScores);
   stats.suppressedConflicts = conflicts.reduce((sum, c) => sum + c.suppressedMemoryIds.length, 0);
 
-  const byScore = (a: MemoryItem, b: MemoryItem) => scoreMemory(b) - scoreMemory(a);
+  const byScore = (a: MemoryItem, b: MemoryItem) => scoreMemory(b, ftsScores) - scoreMemory(a, ftsScores);
 
   const isWarning = (m: MemoryItem) => m.type === 'pitfall';
+  const isRecent = (m: MemoryItem) => isRecentSessionSummary(m);
 
   const retrieved = {
-    repo: selected.filter((m) => m.scope === 'repo' && !isWarning(m)).sort(byScore).slice(0, limits.repo),
-    project: selected.filter((m) => m.scope === 'project' && !isWarning(m)).sort(byScore).slice(0, limits.project),
-    domain: selected.filter((m) => m.scope === 'domain' && !isWarning(m)).sort(byScore).slice(0, limits.domain),
+    repo: selected.filter((m) => m.scope === 'repo' && !isWarning(m) && !isRecent(m)).sort(byScore).slice(0, limits.repo),
+    project: selected.filter((m) => m.scope === 'project' && !isWarning(m) && !isRecent(m)).sort(byScore).slice(0, limits.project),
+    domain: selected.filter((m) => m.scope === 'domain' && !isWarning(m) && !isRecent(m)).sort(byScore).slice(0, limits.domain),
     user: selected.filter((m) => m.scope === 'user' && m.type === 'user_preference').sort(byScore).slice(0, limits.user),
     global: selected.filter((m) => m.scope === 'global' && m.type === 'workflow_rule').sort(byScore).slice(0, limits.global),
     warnings: selected.filter(isWarning).sort(byScore).slice(0, limits.warnings),
+    recent: selected.filter(isRecent).sort(byScore).slice(0, limits.recent),
   };
   stats.injected = Object.values(retrieved).reduce((sum, items) => sum + items.length, 0);
 
@@ -155,7 +165,7 @@ function matchesAppliesTo(memory: MemoryItem, ctx: RetrievalContext): boolean {
   return false;
 }
 
-function suppressConflicts(memories: MemoryItem[]): { selected: MemoryItem[]; conflicts: ConflictReport[] } {
+function suppressConflicts(memories: MemoryItem[], ftsScores: Map<string, number>): { selected: MemoryItem[]; conflicts: ConflictReport[] } {
   const byTopic = new Map<string, MemoryItem[]>();
   for (const memory of memories) {
     const topic = conflictTopic(memory);
@@ -167,7 +177,7 @@ function suppressConflicts(memories: MemoryItem[]): { selected: MemoryItem[]; co
   const selected: MemoryItem[] = [];
   const conflicts: ConflictReport[] = [];
   for (const [topic, group] of byTopic.entries()) {
-    const sorted = [...group].sort((a, b) => scoreMemory(b) - scoreMemory(a));
+    const sorted = [...group].sort((a, b) => scoreMemory(b, ftsScores) - scoreMemory(a, ftsScores));
     selected.push(sorted[0]);
     const suppressed = sorted.slice(1);
     if (suppressed.length > 0) {
@@ -184,12 +194,14 @@ function suppressConflicts(memories: MemoryItem[]): { selected: MemoryItem[]; co
 }
 
 function conflictTopic(memory: MemoryItem): string {
-  if (memory.tags.length > 0) return memory.tags[0];
+  const conflictTag = memory.tags.find((tag) => tag.startsWith('conflict:'));
+  if (conflictTag) return conflictTag;
+  if (memory.tags.length > 0 && memory.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') === memory.tags[0]) return memory.tags[0];
   return memory.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-function scoreMemory(memory: MemoryItem): number {
-  return scopePriority(memory.scope) * 100 + memory.confidence;
+function scoreMemory(memory: MemoryItem, ftsScores: Map<string, number>): number {
+  return scopePriority(memory.scope) * 100 + memory.confidence + (ftsScores.get(memory.id) ?? 0);
 }
 
 function scopePriority(scope: MemoryItem['scope']): number {
@@ -207,12 +219,30 @@ function scopePriority(scope: MemoryItem['scope']): number {
 function globMatch(pattern: string, value: string): boolean {
   const escaped = pattern
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '.*')
-    .replace(/\*/g, '[^/]*');
+    .replace(/\*\*/g, '\u0000')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\u0000/g, '.*');
   return new RegExp(`^${escaped}$`).test(value);
 }
 
-export function formatContextMarkdown(ctx: RetrievalContext, retrieved: RetrievedContext): string {
+function buildFtsScores(repo: MarkdownMemoryRepository, query: string | undefined): Map<string, number> {
+  const scores = new Map<string, number>();
+  if (!query?.trim()) return scores;
+  try {
+    for (const result of repo.search(query)) {
+      scores.set(result.memory.id, Math.max(0, -result.rank) + 25);
+    }
+  } catch {
+    return scores;
+  }
+  return scores;
+}
+
+function isRecentSessionSummary(memory: MemoryItem): boolean {
+  return memory.tags.includes('session-summary') || memory.sourceRefs.some((ref) => ref.startsWith('session-summary.'));
+}
+
+export function formatContextMarkdown(ctx: RetrievalContext, retrieved: RetrievedContext, maxTokens?: number): string {
   const lines: string[] = ['# I-Evolve Context', ''];
 
   lines.push('## Current Repository');
@@ -235,6 +265,10 @@ export function formatContextMarkdown(ctx: RetrievalContext, retrieved: Retrieve
   renderGroup('High Priority Memories', highPriority);
   renderGroup('Active Instincts', retrieved.global);
   renderGroup('Warnings', retrieved.warnings);
+  renderGroup('Recent Session Summaries', retrieved.recent);
 
-  return lines.join('\n').trimEnd() + '\n';
+  const markdown = lines.join('\n').trimEnd() + '\n';
+  if (!maxTokens || maxTokens <= 0) return markdown;
+  const maxChars = Math.max(200, maxTokens * 4);
+  return markdown.length > maxChars ? markdown.slice(0, maxChars).trimEnd() + '\n' : markdown;
 }

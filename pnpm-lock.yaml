@@ -35,15 +35,56 @@ importers:
       '@i-evolve/daemon':
         specifier: workspace:*
         version: link:../../packages/daemon
+      '@i-evolve/dashboard':
+        specifier: workspace:*
+        version: link:../dashboard
       '@i-evolve/git-sync':
         specifier: workspace:*
         version: link:../../packages/git-sync
+      '@i-evolve/mcp-server':
+        specifier: workspace:*
+        version: link:../mcp-server
       '@i-evolve/schema':
         specifier: workspace:*
         version: link:../../packages/schema
       '@i-evolve/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@i-evolve/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+    devDependencies:
+      tsup:
+        specifier: ^8.4.0
+        version: 8.5.1(postcss@8.5.15)(tsx@4.22.4)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  apps/dashboard:
+    dependencies:
+      '@i-evolve/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@i-evolve/daemon':
+        specifier: workspace:*
+        version: link:../../packages/daemon
+    devDependencies:
+      tsup:
+        specifier: ^8.4.0
+        version: 8.5.1(postcss@8.5.15)(tsx@4.22.4)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  apps/mcp-server:
+    dependencies:
+      '@i-evolve/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@i-evolve/daemon':
+        specifier: workspace:*
+        version: link:../../packages/daemon
       '@i-evolve/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -89,9 +130,15 @@ importers:
 
   packages/daemon:
     dependencies:
+      '@i-evolve/ai-evolution':
+        specifier: workspace:*
+        version: link:../ai-evolution
       '@i-evolve/core':
         specifier: workspace:*
         version: link:../core
+      '@i-evolve/git-sync':
+        specifier: workspace:*
+        version: link:../git-sync
       '@i-evolve/repository':
         specifier: workspace:*
         version: link:../repository
@@ -101,6 +148,9 @@ importers:
       '@i-evolve/shared':
         specifier: workspace:*
         version: link:../shared
+      '@i-evolve/storage':
+        specifier: workspace:*
+        version: link:../storage
     devDependencies:
       tsup:
         specifier: ^8.4.0

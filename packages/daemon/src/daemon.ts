@@ -6,14 +6,18 @@ import { ObservationWriter } from './observation-writer.js';
 import { AuditWriter } from './audit-writer.js';
 import { SerialTransactionManager } from './transaction-manager.js';
 import type { DaemonRequest, DaemonResponse } from './ipc-types.js';
+import { DaemonMemoryService } from './memory-service.js';
+import { IEvolveError } from '@i-evolve/shared';
 
 export class Daemon {
   private lock = new ProcessLock();
   private ipc: IpcServer;
   private observations = new ObservationWriter();
   private audit = new AuditWriter();
+  private memory = new DaemonMemoryService();
   private txManager = new SerialTransactionManager();
   private startedAt: string | null = null;
+  private signalHandler = () => void this.stop();
 
   constructor() {
     this.ipc = new IpcServer(this.handleRequest.bind(this));
@@ -35,14 +39,16 @@ export class Daemon {
     await this.ipc.start();
     this.startedAt = new Date().toISOString();
 
-    process.on('SIGTERM', () => this.stop());
-    process.on('SIGINT', () => this.stop());
+    process.on('SIGTERM', this.signalHandler);
+    process.on('SIGINT', this.signalHandler);
   }
 
   async stop(): Promise<void> {
     await this.ipc.stop();
     this.lock.release();
     this.startedAt = null;
+    process.off('SIGTERM', this.signalHandler);
+    process.off('SIGINT', this.signalHandler);
   }
 
   get transactionManager(): SerialTransactionManager {
@@ -82,6 +88,47 @@ export class Daemon {
       case 'session.finalize':
         return { ok: true, data: { sessionId: req.payload.sessionId } };
 
+      case 'memory.recall':
+        return this.handleMemoryRead(() => this.memory.recall(req.payload));
+
+      case 'memory.search':
+        return this.handleMemoryRead(() => this.memory.search(req.payload));
+
+      case 'memory.remember':
+        return this.txManager.run('memory.remember', { name: 'memory.remember' }, async () =>
+          this.handleMemoryRead(() => this.memory.remember(req.payload)));
+
+      case 'memory.forget':
+        return this.txManager.run('memory.forget', { name: 'memory.forget' }, async () =>
+          this.handleMemoryRead(() => this.memory.forget(req.payload)));
+
+      case 'memory.audit':
+        return this.handleMemoryRead(() => this.memory.auditMemory(req.payload));
+
+      case 'memory.explain':
+        return this.handleMemoryRead(() => ({ explanation: this.memory.explainMemory(req.payload) }));
+
+      case 'memory.sync':
+        return this.txManager.run('memory.sync', { name: 'memory.sync' }, async () =>
+          this.handleMemoryRead(() => this.memory.syncMemory(req.payload)));
+
+      case 'dashboard.summary':
+        return this.handleMemoryRead(() => this.memory.dashboardSummary());
+
+      case 'dashboard.memory':
+        return this.handleMemoryRead(() => this.memory.dashboardMemory(req.payload));
+
+      case 'dashboard.rollback':
+        return this.txManager.run('dashboard.rollback', { name: 'dashboard.rollback' }, async () =>
+          this.handleMemoryRead(() => this.memory.rollback(req.payload)));
+
+      case 'index.rebuild':
+        return this.txManager.run('index.rebuild', { name: 'index.rebuild' }, async () =>
+          this.handleMemoryRead(() => this.memory.rebuildIndex()));
+
+      case 'git.status':
+        return this.handleMemoryRead(() => this.memory.gitStatus());
+
       default:
         return {
           ok: false,
@@ -89,6 +136,21 @@ export class Daemon {
         };
     }
   };
+
+  private async handleMemoryRead<T>(fn: () => T | Promise<T>): Promise<DaemonResponse<T>> {
+    try {
+      return { ok: true, data: await fn() };
+    } catch (err) {
+      const code = err instanceof IEvolveError ? err.code : 'DAEMON_REQUEST_FAILED';
+      return {
+        ok: false,
+        error: {
+          code,
+          message: err instanceof Error ? err.message : String(err),
+        },
+      };
+    }
+  }
 
   private ensureDirs(): void {
     for (const dir of [

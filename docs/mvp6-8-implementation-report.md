@@ -1,86 +1,84 @@
-# MVP6-8 Implementation Report
+# MVP6-8 Acceptance Implementation Report
 
 Date: 2026-06-13
 
 ## Summary
 
-This pass implemented the remaining MVP6-8 foundations from `docs/i-evolve-mvp-specs/07` through `09`.
+This pass upgrades the previous MVP6-8 foundation into executable acceptance coverage for `docs/i-evolve-mvp-specs/07` through `09`.
 
 ## MVP6: Cross-Repo Retrieval
 
 Implemented:
 
-- Project identity detection from Git remote and package metadata.
-- Git remote URL normalization for SSH and HTTPS remotes.
-- Project profile parsing from Markdown frontmatter.
-- `applies_to` matching for repo glob patterns, package names, and path patterns.
-- Scope priority scoring: task, repo, project, domain, user, global.
-- Same-topic conflict suppression with `ConflictReport`.
-- Debug retrieval stats for candidates, expired/deprecated/scope-mismatch filters, injected count, and suppressed conflicts.
-- `i-evolve identity detect`.
-- `i-evolve inject --debug`.
-- `i-evolve retrieval explain --memory <id>` minimal explanation.
+- Project identity detection from Git remote, `package.json`, `go.mod`, `pnpm-workspace.yaml`, and project profiles.
+- Persistent `i-evolve identity bind --project <id>` via `project-profile.md`.
+- `applies_to` matching for repo, package, and path globs, including `**`.
+- FTS query score contribution for Top-K ordering.
+- Scope filtering, expired/deprecated/rejected exclusion, same-topic conflict suppression, and safer generic-tag handling.
+- `recent session summary Top 2` bucket using session-summary refs/tags.
+- `i-evolve inject --debug` stats including FTS match counts and conflict suppression.
 
-Tests added:
+Evidence:
 
-- Repo ID detection from Git remote.
-- Project profile matching.
-- Cross-repo `applies_to` behavior.
-- Repo memory priority over project memory.
-- Debug counters.
-- Pollution tests for repo A not leaking into repo B and domain memory crossing related repos.
+- `packages/storage/src/context-retrieval.test.ts`
+- `packages/storage/src/project-identity.test.ts`
+- `tests/pollution.test.ts`
 
 ## MVP7: MCP Server
 
 Implemented:
 
-- `apps/mcp-server` workspace package.
-- MCP handler boundary with `recall`, `remember`, `forget`, `search_memory`, `audit_memory`, `explain_memory`, and `sync_memory`.
-- Daemon health gate for startup.
-- `i-evolve mcp start --stdio` and `i-evolve mcp status` CLI entry points.
+- `apps/mcp-server` package with a concrete daemon-backed IPC client.
+- Minimal MCP-compatible JSON-RPC stdio transport for `initialize`, `tools/list`, and `tools/call`.
+- Tools: `recall`, `remember`, `forget`, `search_memory`, `audit_memory`, `explain_memory`, and `sync_memory`.
+- `i-evolve mcp start --stdio` now runs the stdio transport instead of printing a readiness stub.
+- Daemon startup health gate and readable JSON-RPC errors.
+- Daemon IPC endpoints for memory recall/search/remember/forget/audit/explain/sync.
 
-Notes:
+Evidence:
 
-- The current MCP server is a testable handler and stdio-ready package boundary, not yet a full SDK-backed MCP transport implementation.
-- The handler API is intentionally daemon-client based so future transport wiring does not bypass daemon writes.
+- `tests/mcp-server.test.ts` starts a real daemon and MCP stdio process, then calls `recall`.
+- `packages/daemon/src/daemon.test.ts` verifies daemon memory IPC endpoints.
 
 ## MVP8: Dashboard, Doctor, Repair, Release
 
 Implemented:
 
-- `apps/dashboard` workspace package.
-- Static Dashboard MVP shell with pages/navigation for Memories, Memory Detail, Audit, Conflicts, Daemon Status, Git Status, and Settings.
-- Dashboard daemon API client boundary for local-only daemon bridge calls.
-- Enhanced `i-evolve doctor` with memory repo, schema version, SQLite, audit, Git, remote memory, and MCP status signals.
-- `i-evolve repair rebuild-index`.
-- `i-evolve repair verify-hashes`.
-- Release checklist at `docs/release-checklist.md`.
-- Pollution tests covering core cross-repo contamination risks.
+- Functional static dashboard panels for Memories, Audit, Conflicts, Daemon Status, Git Status, and Settings.
+- Dashboard actions for forget, deprecate, and rollback routed through the daemon client.
+- Local dashboard HTTP bridge for documented endpoints including `/health`, `/memories`, `/audit`, `/conflicts`, `/git/status`, `/index/rebuild`, and memory actions.
+- `i-evolve dashboard bridge [--port]` CLI entry point.
+- Expanded `i-evolve doctor` status signals for CLI version, SQLite/FTS, Claude plugin, MCP, Git/remote memory.
+- `repair audit-log`, `repair git-cleanup`, dry-run behavior, and system audit writes.
+- Expanded pollution tests for deprecated/rejected injection, scope leakage, sensitive memory blocking, daemon write failure, and revision conflicts.
 
-Notes:
+Evidence:
 
-- The Dashboard is a static, dependency-light MVP shell. A full interactive React/Vite dashboard can be layered on later if/when frontend dependencies are adopted.
-- Dashboard actions are intentionally routed through a daemon bridge client boundary and do not read/write Markdown directly.
+- `tests/dashboard.test.ts`
+- `tests/pollution.test.ts`
+- `packages/daemon/src/daemon.test.ts`
 
 ## Verification
 
-Fresh verification commands used during this pass:
+Run for this acceptance pass:
 
 ```bash
 pnpm test
 pnpm typecheck
 pnpm build
+node --import tsx <dashboard bridge smoke>
 ```
 
-Observed results:
+Observed:
 
-- `pnpm test`: 11 test files, 104 tests passed.
-- `pnpm typecheck`: all workspace projects passed.
-- `pnpm build`: all workspace build scripts completed successfully.
+- `pnpm test`: 12 test files, 122 tests passed.
+- `pnpm typecheck`: all workspace typecheck scripts passed.
+- `pnpm build`: all workspace build scripts passed.
+- Dashboard bridge smoke: `GET /health` returned HTTP 200 with daemon status `running`.
 
-## Remaining Hardening
+## Remaining Non-Blocking Hardening
 
-- Replace the MCP handler shim with a concrete MCP SDK transport while preserving daemon-only writes.
-- Add daemon IPC endpoints for memory create/update/forget/index/sync so CLI, MCP, and Dashboard all share one write coordinator.
-- Add a local Dashboard daemon bridge implementation for the documented HTTP-like endpoints.
-- Add e2e tests for installed Claude plugin, MCP stdio transport, and Dashboard bridge actions.
+- Replace the minimal JSON-RPC MCP transport with an official MCP SDK transport when the dependency is adopted.
+- Replace the dependency-light static dashboard with a richer frontend framework if product scope grows.
+- Add browser-level visual regression tests for the dashboard.
+- Replace placeholder doctor values such as last pull time and unpushed commit count with exact Git remote calculations.

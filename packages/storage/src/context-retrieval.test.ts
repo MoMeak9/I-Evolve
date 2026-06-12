@@ -131,4 +131,66 @@ describe('retrieveContext', () => {
     expect(debug.stats.filteredScopeMismatch).toBeGreaterThanOrEqual(1);
     expect(debug.stats.injected).toBe(debug.retrieved.global.length + debug.retrieved.warnings.length);
   });
+
+  it('uses FTS query score to order matches within a scope', () => {
+    repo.create({
+      id: 'project.demo.react-low', type: 'project_fact', scope: 'project', projectId: 'demo',
+      title: 'Generic UI', content: 'React appears once.', status: 'active', visibility: 'team',
+      confidence: 0.6, ttlDays: 90, tags: [], sourceRefs: [],
+    });
+    repo.create({
+      id: 'project.demo.react-high', type: 'project_fact', scope: 'project', projectId: 'demo',
+      title: 'React React Hydration', content: 'React hydration React SSR React.', status: 'active', visibility: 'team',
+      confidence: 0.6, ttlDays: 90, tags: [], sourceRefs: [],
+    });
+
+    const result = retrieveContext(repo, { projectId: 'demo', query: 'React hydration' });
+    expect(result.project.map((m) => m.id)[0]).toBe('project.demo.react-high');
+  });
+
+  it('keeps recent session summaries as a Top 2 bucket', () => {
+    for (let i = 1; i <= 3; i++) {
+      repo.create({
+        id: `project.demo.session-${i}`, type: 'project_fact', scope: 'project', projectId: 'demo',
+        title: `Session ${i}`, content: `Recent session summary ${i}.`, status: 'active', visibility: 'team',
+        confidence: 0.7 + i / 100, ttlDays: 7, tags: ['session-summary'], sourceRefs: [`session-summary.${i}`],
+      });
+    }
+
+    const result = retrieveContext(repo, { projectId: 'demo' });
+    expect(result.recent.map((m) => m.id)).toEqual(['project.demo.session-3', 'project.demo.session-2']);
+    expect(formatContextMarkdown({ projectId: 'demo' }, result)).toContain('Recent Session Summaries');
+  });
+
+  it('matches double-star path globs across directories', () => {
+    repo.create({
+      id: 'repo.acme.deep-path', type: 'repo_fact', scope: 'repo', repoId: 'acme/editor',
+      title: 'Deep Path', content: 'Applies deeply.', status: 'active', visibility: 'team',
+      confidence: 0.9, ttlDays: 90, tags: [], sourceRefs: [],
+      appliesTo: { pathPatterns: ['src/**/*.tsx'] },
+    });
+
+    const result = retrieveContext(repo, { path: 'src/features/editor/index.tsx' });
+    expect(result.repo.map((m) => m.id)).toContain('repo.acme.deep-path');
+  });
+
+  it('does not suppress unrelated memories that only share a generic tag', () => {
+    repo.create({
+      id: 'project.demo.react-api', type: 'project_fact', scope: 'project', projectId: 'demo',
+      title: 'React API', content: 'Use API pattern.', status: 'active', visibility: 'team',
+      confidence: 0.9, ttlDays: 90, tags: ['react'], sourceRefs: [],
+    });
+    repo.create({
+      id: 'project.demo.react-build', type: 'project_fact', scope: 'project', projectId: 'demo',
+      title: 'React Build', content: 'Use build pattern.', status: 'active', visibility: 'team',
+      confidence: 0.8, ttlDays: 90, tags: ['react'], sourceRefs: [],
+    });
+
+    const result = retrieveContextDebug(repo, { projectId: 'demo' });
+    expect(result.retrieved.project.map((m) => m.id)).toEqual([
+      'project.demo.react-api',
+      'project.demo.react-build',
+    ]);
+    expect(result.conflicts).toHaveLength(0);
+  });
 });

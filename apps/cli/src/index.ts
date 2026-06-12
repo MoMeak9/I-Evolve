@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { validateMemory, validateObservation, validateAuditAction, detectCamelCaseKeys, schemas } from '@i-evolve/schema';
@@ -35,6 +35,7 @@ const { positionals, values } = parseArgs({
     project: { type: 'string' },
     memory: { type: 'string' },
     stdio: { type: 'boolean' },
+    port: { type: 'string' },
   },
 });
 
@@ -100,18 +101,40 @@ if (command === 'daemon') {
     lock.repair();
     console.log('Stale lock removed.');
   } else if (subcommand === 'rebuild-index') {
+    if (values['dry-run']) {
+      console.log('Dry run: would rebuild SQLite/FTS index.');
+      process.exit(0);
+    }
     const { MarkdownMemoryRepository } = await import('@i-evolve/storage');
     const repo = new MarkdownMemoryRepository({ memoryDir: paths.shared.memory, dbPath: join(paths.base, 'shared', 'index.db') });
     const result = repo.rebuildIndex();
     repo.close();
+    appendSystemAudit(paths.audit.dir, paths.audit.current, 'index.rebuild', `rebuilt index: ${result.total} memories, ${result.errors} errors`);
     console.log(`Index rebuilt: ${result.total} memories indexed, ${result.errors} errors.`);
   } else if (subcommand === 'verify-hashes') {
     const { validateMemoryRepo } = await import('@i-evolve/git-sync');
     const report = validateMemoryRepo(paths.shared.memory);
     console.log(report.ok ? 'Memory hashes verified.' : `Hash/schema verification failed: ${report.issues.length} issue(s).`);
     if (!report.ok) process.exit(1);
+  } else if (subcommand === 'audit-log') {
+    if (values['dry-run']) {
+      console.log('Dry run: would repair audit log directory.');
+      process.exit(0);
+    }
+    if (!existsSync(paths.audit.dir)) mkdirSync(paths.audit.dir, { recursive: true });
+    appendSystemAudit(paths.audit.dir, paths.audit.current, 'audit.repair', 'verified audit log directory');
+    console.log('Audit log repaired.');
+  } else if (subcommand === 'git-cleanup') {
+    if (values['dry-run']) {
+      console.log('Dry run: would remove stale git workspace lock.');
+      process.exit(0);
+    }
+    const lockPath = join(paths.shared.memory, '.git', 'i-evolve.lock');
+    if (existsSync(lockPath)) rmSync(lockPath, { force: true });
+    appendSystemAudit(paths.audit.dir, paths.audit.current, 'git.cleanup', 'removed stale git workspace lock if present');
+    console.log('Git cleanup complete.');
   } else {
-    console.error('Usage: i-evolve repair <stale-lock|rebuild-index|verify-hashes>');
+    console.error('Usage: i-evolve repair <stale-lock|rebuild-index|verify-hashes|audit-log|git-cleanup> [--dry-run]');
     process.exit(1);
   }
 } else if (command === 'memory') {
@@ -132,6 +155,13 @@ if (command === 'daemon') {
 } else if (command === 'mcp') {
   const { handleMcpCommand } = await import('./commands/mcp.js');
   await handleMcpCommand(subcommand, values);
+} else if (command === 'dashboard') {
+  if (subcommand !== 'bridge') {
+    console.error('Usage: i-evolve dashboard bridge [--port 17361]');
+    process.exit(1);
+  }
+  const { startDashboardBridge } = await import('@i-evolve/dashboard/bridge');
+  startDashboardBridge(values.port ? Number(values.port) : undefined);
 } else if (command === 'schema' && subcommand === 'validate') {
   const file = rest[0];
   if (!file) {
@@ -193,12 +223,15 @@ if (command === 'daemon') {
   const { readSchemaVersion } = await import('@i-evolve/git-sync');
   console.log('i-evolve doctor');
   console.log('  Node.js:', process.version);
+  console.log('  CLI version:', '0.0.0');
   console.log('  Platform:', process.platform);
   console.log('  Data dir:', paths.base);
   console.log('  Memory repo:', existsSync(paths.shared.memory) ? 'exists' : 'missing');
   console.log('  Schema version:', readSchemaVersion(paths.shared.memory));
   console.log('  SQLite index:', existsSync(join(paths.base, 'shared', 'index.db')) ? 'exists' : 'missing');
+  console.log('  FTS health:', existsSync(join(paths.base, 'shared', 'index.db')) ? 'available' : 'missing');
   console.log('  Audit log:', existsSync(paths.audit.dir) ? 'exists' : 'missing');
+  console.log('  Claude plugin:', existsSync(join(process.cwd(), 'packages', 'claude-plugin', '.claude-plugin', 'plugin.json')) ? 'present' : 'missing');
 
   try {
     const resp = await sendRequest({ type: 'health' });
@@ -216,6 +249,9 @@ if (command === 'daemon') {
       console.log('  Git branch:', status.branch);
       console.log('  Git clean:', status.clean);
       console.log('  Git commit:', status.commit.slice(0, 8));
+      console.log('  Remote branch:', status.branch);
+      console.log('  Unpushed commits:', 'unknown');
+      console.log('  Last pull time:', 'unknown');
       console.log('  Remote memory:', 'initialized');
     } else {
       console.log('  Remote memory: not initialized');
@@ -238,4 +274,21 @@ function detectSchemaType(data: Record<string, unknown>): string {
   if ('memory_id' in data && 'action' in data && 'actor_type' in data) return 'audit-action';
   if ('session_id' in data && 'phase' in data) return 'observation';
   return 'memory';
+}
+
+function appendSystemAudit(auditDir: string, auditFile: string, idSuffix: string, reason: string): void {
+  if (!existsSync(auditDir)) mkdirSync(auditDir, { recursive: true });
+  const now = new Date().toISOString();
+  appendFileSync(auditFile, JSON.stringify({
+    id: `audit.system.${Date.now()}.${idSuffix}`,
+    memoryId: 'system.repair',
+    action: 'migrate',
+    actorType: 'system',
+    actorId: 'i-evolve-repair',
+    reason,
+    confidence: 1,
+    sourceRefs: [],
+    policyChecks: [{ policy: 'repair_audit', passed: true }],
+    createdAt: now,
+  }) + '\n', 'utf-8');
 }

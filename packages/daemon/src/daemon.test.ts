@@ -7,6 +7,7 @@ import { Daemon } from './daemon.js';
 import { sendRequest } from './ipc-client.js';
 import { ObservationWriter } from './observation-writer.js';
 import { AuditWriter } from './audit-writer.js';
+import { MarkdownMemoryRepository } from '@i-evolve/storage';
 
 // Use /tmp with short ID to stay under macOS 104-byte socket path limit
 const testDir = join('/tmp', `ie-${randomBytes(4).toString('hex')}`);
@@ -167,5 +168,149 @@ describe('Daemon IPC observe', () => {
       } as any,
     });
     expect(resp.ok).toBe(true);
+  });
+});
+
+describe('Daemon memory API', () => {
+  let daemon: Daemon;
+
+  beforeEach(async () => {
+    mkdirSync(paths.shared.dir, { recursive: true });
+    const repo = new MarkdownMemoryRepository({
+      memoryDir: paths.shared.memory,
+      dbPath: join(paths.base, 'shared', 'index.db'),
+    });
+    repo.create({
+      id: 'project.demo.ssr-rule',
+      type: 'project_fact',
+      scope: 'project',
+      projectId: 'demo',
+      title: 'SSR Rule',
+      content: 'SSR hydration must be reviewed before release.',
+      status: 'active',
+      visibility: 'team',
+      confidence: 0.91,
+      ttlDays: 90,
+      tags: ['ssr'],
+      sourceRefs: ['test'],
+    });
+    repo.close();
+
+    daemon = new Daemon();
+    await daemon.start();
+  });
+
+  afterEach(async () => {
+    try { await daemon.stop(); } catch {}
+  });
+
+  it('recalls context and memory provenance through daemon IPC', async () => {
+    const resp = await sendRequest<{ context: string; memories: Array<{ id: string; reason: string }> }>({
+      type: 'memory.recall',
+      payload: {
+        query: 'SSR hydration',
+        cwd: testDir,
+        projectId: 'demo',
+        maxTokens: 2000,
+      },
+    } as any);
+
+    expect(resp.ok).toBe(true);
+    expect(resp.data?.context).toContain('# I-Evolve Context');
+    expect(resp.data?.context).toContain('SSR hydration must be reviewed');
+    expect(resp.data?.memories[0].id).toBe('project.demo.ssr-rule');
+    expect(resp.data?.memories[0].reason).toContain('project');
+  });
+
+  it('searches active memory through daemon IPC using FTS', async () => {
+    const resp = await sendRequest<Array<{ id: string; scope: string; confidence: number; reason: string }>>({
+      type: 'memory.search',
+      payload: { query: 'hydration' },
+    } as any);
+
+    expect(resp.ok).toBe(true);
+    expect(resp.data?.[0]).toMatchObject({
+      id: 'project.demo.ssr-rule',
+      scope: 'project',
+      confidence: 0.91,
+    });
+  });
+
+  it('serializes remember and forget writes through daemon transactions and writes audit', async () => {
+    const remembered = await sendRequest<{ memoryId: string; auditId: string }>({
+      type: 'memory.remember',
+      payload: {
+        content: 'Always run release smoke tests for dashboard changes.',
+        cwd: testDir,
+        projectId: 'demo',
+      },
+    } as any);
+    expect(remembered.ok).toBe(true);
+    expect(remembered.data?.memoryId).toMatch(/^project\.demo\./);
+
+    const forgotten = await sendRequest<{ auditId: string }>({
+      type: 'memory.forget',
+      payload: { memoryId: remembered.data?.memoryId, mode: 'soft' },
+    } as any);
+    expect(forgotten.ok).toBe(true);
+
+    const repo = new MarkdownMemoryRepository({
+      memoryDir: paths.shared.memory,
+      dbPath: join(paths.base, 'shared', 'index.db'),
+    });
+    const memory = repo.get(remembered.data!.memoryId);
+    repo.close();
+    expect(memory?.status).toBe('deprecated');
+
+    const audit = readFileSync(paths.audit.current, 'utf-8');
+    expect(audit).toContain(remembered.data!.auditId);
+    expect(audit).toContain(forgotten.data!.auditId);
+  });
+
+  it('returns audit, explanation, dashboard summary, and rebuild result', async () => {
+    await sendRequest({
+      type: 'audit.append',
+      payload: {
+        id: 'audit-demo-001',
+        memoryId: 'project.demo.ssr-rule',
+        action: 'activate',
+        actorType: 'system',
+        actorId: 'daemon-test',
+        reason: 'seeded for test',
+        confidence: 1,
+        sourceRefs: [],
+        policyChecks: [{ policy: 'test', passed: true }],
+        createdAt: '2026-06-12T10:00:00+08:00',
+      } as any,
+    });
+
+    const audit = await sendRequest<unknown[]>({
+      type: 'memory.audit',
+      payload: { memoryId: 'project.demo.ssr-rule' },
+    } as any);
+    expect(audit.ok).toBe(true);
+    expect(audit.data).toHaveLength(1);
+
+    const explanation = await sendRequest<{ explanation: string }>({
+      type: 'memory.explain',
+      payload: { memoryId: 'project.demo.ssr-rule' },
+    } as any);
+    expect(explanation.data?.explanation).toContain('seeded for test');
+
+    const dashboard = await sendRequest<{ memories: unknown[]; audit: unknown[]; conflicts: unknown[]; git: unknown }>({
+      type: 'dashboard.summary',
+      payload: {},
+    } as any);
+    expect(dashboard.ok).toBe(true);
+    expect(dashboard.data?.memories).toHaveLength(1);
+    expect(dashboard.data?.audit).toHaveLength(1);
+    expect(dashboard.data?.git).toBeDefined();
+
+    const rebuild = await sendRequest<{ total: number; errors: number }>({
+      type: 'index.rebuild',
+      payload: {},
+    } as any);
+    expect(rebuild.ok).toBe(true);
+    expect(rebuild.data?.total).toBeGreaterThanOrEqual(1);
   });
 });

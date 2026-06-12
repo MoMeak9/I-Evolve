@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { paths } from '@i-evolve/daemon';
-import { detectProjectIdentity, readProjectProfile, type ProjectProfileDocument } from '@i-evolve/storage';
+import { bindProjectIdentity, detectProjectIdentity, readProjectProfile, type ProjectProfileDocument } from '@i-evolve/storage';
 
 export async function handleIdentityCommand(subcommand: string | undefined, flags: Record<string, unknown>): Promise<void> {
   switch (subcommand) {
@@ -17,7 +17,27 @@ export async function handleIdentityCommand(subcommand: string | undefined, flag
       break;
     }
     case 'bind': {
-      console.log('Identity bind is recorded through project profiles in MVP6.');
+      const cwd = (flags.cwd as string | undefined) ?? process.cwd();
+      const projectId = flags.project as string | undefined;
+      if (!projectId) {
+        console.error('Usage: i-evolve identity bind --project <project-id> [--domain <domain>]');
+        process.exit(1);
+      }
+      const identity = detectProjectIdentity({
+        cwd,
+        profiles: readProfiles(),
+        manualProjectId: projectId,
+        manualDomain: flags.domain as string | undefined,
+      });
+      const profilePath = bindProjectIdentity({
+        memoryDir: paths.shared.memory,
+        projectId,
+        repoId: identity.repoId,
+        domain: identity.domain,
+        packageNames: identity.packageNames,
+      });
+      console.log(`Identity bound: repo=${identity.repoId}, project=${projectId}`);
+      console.log(`Profile: ${profilePath}`);
       break;
     }
     default:

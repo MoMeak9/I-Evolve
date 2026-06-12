@@ -1,4 +1,5 @@
 import { sendRequest } from '@i-evolve/daemon';
+import { runMcpStdio } from '@i-evolve/mcp-server';
 
 export async function handleMcpCommand(subcommand: string | undefined, flags: Record<string, unknown>): Promise<void> {
   switch (subcommand) {
@@ -6,7 +7,11 @@ export async function handleMcpCommand(subcommand: string | undefined, flags: Re
       try {
         const resp = await sendRequest({ type: 'health' });
         if (!resp.ok) throw new Error(resp.error?.message ?? 'daemon unavailable');
-        console.log(flags.stdio ? 'MCP server ready on stdio.' : 'MCP server ready.');
+        if (flags.stdio) {
+          await runMcpStdio();
+        } else {
+          console.log('MCP server ready. Use --stdio to run the MCP transport.');
+        }
       } catch {
         console.error('Error: I-Evolve daemon is not running. Run: i-evolve daemon start');
         process.exit(1);
