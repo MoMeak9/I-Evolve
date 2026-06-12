@@ -3,7 +3,7 @@ import { rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { MarkdownMemoryRepository } from './memory-repository.js';
-import { retrieveContext, formatContextMarkdown } from './context-retrieval.js';
+import { retrieveContext, formatContextMarkdown, retrieveContextDebug } from './context-retrieval.js';
 
 const testDir = join('/tmp', `ie-ctx-${randomBytes(4).toString('hex')}`);
 let repo: MarkdownMemoryRepository;
@@ -83,5 +83,52 @@ describe('retrieveContext', () => {
     expect(md).toContain('A project fact.');
     expect(md).toContain('Active Instincts');
     expect(md).toContain('Warnings');
+  });
+
+  it('allows repo memory to cross repos only through applies_to', () => {
+    repo.create({
+      id: 'repo.acme-editor.cross-repo', type: 'repo_fact', scope: 'repo', repoId: 'acme/editor',
+      title: 'Cross Repo', content: 'Applies to sibling repos.', status: 'active', visibility: 'team',
+      confidence: 0.9, ttlDays: 90, tags: [], sourceRefs: [],
+      appliesTo: { repoPatterns: ['acme/*'] },
+    });
+    repo.create({
+      id: 'repo.other.no-cross', type: 'repo_fact', scope: 'repo', repoId: 'other/repo',
+      title: 'No Cross', content: 'Must not cross without applies_to.', status: 'active', visibility: 'team',
+      confidence: 0.95, ttlDays: 90, tags: [], sourceRefs: [],
+    });
+
+    const result = retrieveContext(repo, { repoId: 'acme/admin' });
+    expect(result.repo.map((m) => m.id)).toContain('repo.acme-editor.cross-repo');
+    expect(result.repo.map((m) => m.id)).not.toContain('repo.other.no-cross');
+  });
+
+  it('suppresses lower-priority conflicts with the same topic', () => {
+    repo.create({
+      id: 'repo.demo.read-before-edit', type: 'workflow_rule', scope: 'repo', repoId: 'acme/editor',
+      title: 'Read Before Edit', content: 'Repo specific read rule.', status: 'active', visibility: 'team',
+      confidence: 0.9, ttlDays: 90, tags: ['read-before-edit'], sourceRefs: [],
+    });
+    repo.create({
+      id: 'project.demo.read-before-edit', type: 'workflow_rule', scope: 'project', projectId: 'demo',
+      title: 'Read Before Edit', content: 'Project read rule.', status: 'active', visibility: 'team',
+      confidence: 0.99, ttlDays: 90, tags: ['read-before-edit'], sourceRefs: [],
+    });
+
+    const debug = retrieveContextDebug(repo, { repoId: 'acme/editor', projectId: 'demo' });
+    expect(debug.retrieved.repo.map((m) => m.id)).toEqual(['repo.demo.read-before-edit']);
+    expect(debug.retrieved.project.map((m) => m.id)).not.toContain('project.demo.read-before-edit');
+    expect(debug.conflicts[0].selectedMemoryId).toBe('repo.demo.read-before-edit');
+    expect(debug.conflicts[0].suppressedMemoryIds).toContain('project.demo.read-before-edit');
+  });
+
+  it('returns debug filter counters', () => {
+    seed();
+    repo.forget('project.demo.fact-one', 'soft');
+    const debug = retrieveContextDebug(repo, { projectId: 'other-project' });
+    expect(debug.stats.candidates).toBeGreaterThan(0);
+    expect(debug.stats.filteredDeprecated).toBeGreaterThanOrEqual(1);
+    expect(debug.stats.filteredScopeMismatch).toBeGreaterThanOrEqual(1);
+    expect(debug.stats.injected).toBe(debug.retrieved.global.length + debug.retrieved.warnings.length);
   });
 });

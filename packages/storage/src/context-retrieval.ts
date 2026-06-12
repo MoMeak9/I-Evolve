@@ -5,6 +5,8 @@ export interface RetrievalContext {
   repoId?: string;
   projectId?: string;
   domain?: string;
+  packageNames?: string[];
+  path?: string;
   now?: string;
 }
 
@@ -35,6 +37,29 @@ export interface RetrievedContext {
   warnings: MemoryItem[];
 }
 
+export interface ConflictReport {
+  id: string;
+  selectedMemoryId: string;
+  suppressedMemoryIds: string[];
+  reason: string;
+  createdAt: string;
+}
+
+export interface RetrievalDebugStats {
+  candidates: number;
+  filteredExpired: number;
+  filteredDeprecated: number;
+  filteredScopeMismatch: number;
+  injected: number;
+  suppressedConflicts: number;
+}
+
+export interface RetrievalDebugResult {
+  retrieved: RetrievedContext;
+  conflicts: ConflictReport[];
+  stats: RetrievalDebugStats;
+}
+
 /**
  * Retrieve memories for context injection.
  * Only active, non-expired memories are eligible. Scope must match context.
@@ -44,39 +69,147 @@ export function retrieveContext(
   ctx: RetrievalContext,
   limits: TopKLimits = DEFAULT_LIMITS,
 ): RetrievedContext {
-  const now = ctx.now ? Date.parse(ctx.now) : Date.now();
-  const all = repo.list({ status: 'active' }).filter((m) => !isExpired(m, now));
+  return retrieveContextDebug(repo, ctx, limits).retrieved;
+}
 
-  const inScope = (m: MemoryItem): boolean => {
-    switch (m.scope) {
-      case 'repo': return !!ctx.repoId && m.repoId === ctx.repoId;
-      case 'project': return !!ctx.projectId && m.projectId === ctx.projectId;
-      case 'domain': return !!ctx.domain && m.domain === ctx.domain;
-      case 'user': return true;
-      case 'global': return true;
-      case 'task': return false;
-      default: return false;
-    }
+export function retrieveContextDebug(
+  repo: MarkdownMemoryRepository,
+  ctx: RetrievalContext,
+  limits: TopKLimits = DEFAULT_LIMITS,
+): RetrievalDebugResult {
+  const now = ctx.now ? Date.parse(ctx.now) : Date.now();
+  const candidates = repo.list();
+  const stats: RetrievalDebugStats = {
+    candidates: candidates.length,
+    filteredExpired: 0,
+    filteredDeprecated: 0,
+    filteredScopeMismatch: 0,
+    injected: 0,
+    suppressedConflicts: 0,
   };
 
-  const eligible = all.filter(inScope);
-  const byConfidence = (a: MemoryItem, b: MemoryItem) => b.confidence - a.confidence;
+  const eligible: MemoryItem[] = [];
+  for (const memory of candidates) {
+    if (memory.status !== 'active') {
+      stats.filteredDeprecated++;
+      continue;
+    }
+    if (isExpired(memory, now)) {
+      stats.filteredExpired++;
+      continue;
+    }
+    if (!matchesScope(memory, ctx)) {
+      stats.filteredScopeMismatch++;
+      continue;
+    }
+    eligible.push(memory);
+  }
+
+  const { selected, conflicts } = suppressConflicts(eligible);
+  stats.suppressedConflicts = conflicts.reduce((sum, c) => sum + c.suppressedMemoryIds.length, 0);
+
+  const byScore = (a: MemoryItem, b: MemoryItem) => scoreMemory(b) - scoreMemory(a);
 
   const isWarning = (m: MemoryItem) => m.type === 'pitfall';
 
-  return {
-    repo: eligible.filter((m) => m.scope === 'repo' && !isWarning(m)).sort(byConfidence).slice(0, limits.repo),
-    project: eligible.filter((m) => m.scope === 'project' && !isWarning(m)).sort(byConfidence).slice(0, limits.project),
-    domain: eligible.filter((m) => m.scope === 'domain' && !isWarning(m)).sort(byConfidence).slice(0, limits.domain),
-    user: eligible.filter((m) => m.scope === 'user' && m.type === 'user_preference').sort(byConfidence).slice(0, limits.user),
-    global: eligible.filter((m) => m.scope === 'global' && m.type === 'workflow_rule').sort(byConfidence).slice(0, limits.global),
-    warnings: eligible.filter(isWarning).sort(byConfidence).slice(0, limits.warnings),
+  const retrieved = {
+    repo: selected.filter((m) => m.scope === 'repo' && !isWarning(m)).sort(byScore).slice(0, limits.repo),
+    project: selected.filter((m) => m.scope === 'project' && !isWarning(m)).sort(byScore).slice(0, limits.project),
+    domain: selected.filter((m) => m.scope === 'domain' && !isWarning(m)).sort(byScore).slice(0, limits.domain),
+    user: selected.filter((m) => m.scope === 'user' && m.type === 'user_preference').sort(byScore).slice(0, limits.user),
+    global: selected.filter((m) => m.scope === 'global' && m.type === 'workflow_rule').sort(byScore).slice(0, limits.global),
+    warnings: selected.filter(isWarning).sort(byScore).slice(0, limits.warnings),
   };
+  stats.injected = Object.values(retrieved).reduce((sum, items) => sum + items.length, 0);
+
+  return { retrieved, conflicts, stats };
 }
 
 function isExpired(m: MemoryItem, now: number): boolean {
   if (!m.expiresAt) return false;
   return Date.parse(m.expiresAt) <= now;
+}
+
+function matchesScope(memory: MemoryItem, ctx: RetrievalContext): boolean {
+  if (matchesAppliesTo(memory, ctx)) return true;
+  switch (memory.scope) {
+    case 'repo': return !!ctx.repoId && memory.repoId === ctx.repoId;
+    case 'project': return !!ctx.projectId && memory.projectId === ctx.projectId;
+    case 'domain': return !!ctx.domain && memory.domain === ctx.domain;
+    case 'user': return true;
+    case 'global': return true;
+    case 'task': return false;
+    default: return false;
+  }
+}
+
+function matchesAppliesTo(memory: MemoryItem, ctx: RetrievalContext): boolean {
+  const appliesTo = memory.appliesTo;
+  if (!appliesTo) return false;
+  const repoId = ctx.repoId;
+  const packageNames = ctx.packageNames ?? [];
+  const path = ctx.path;
+  if (repoId && appliesTo.repoPatterns?.some((pattern) => globMatch(pattern, repoId))) return true;
+  if (packageNames.length > 0 && appliesTo.packageNames?.some((pkg) => packageNames.includes(pkg))) return true;
+  if (path && appliesTo.pathPatterns?.some((pattern) => globMatch(pattern, path))) return true;
+  return false;
+}
+
+function suppressConflicts(memories: MemoryItem[]): { selected: MemoryItem[]; conflicts: ConflictReport[] } {
+  const byTopic = new Map<string, MemoryItem[]>();
+  for (const memory of memories) {
+    const topic = conflictTopic(memory);
+    const group = byTopic.get(topic) ?? [];
+    group.push(memory);
+    byTopic.set(topic, group);
+  }
+
+  const selected: MemoryItem[] = [];
+  const conflicts: ConflictReport[] = [];
+  for (const [topic, group] of byTopic.entries()) {
+    const sorted = [...group].sort((a, b) => scoreMemory(b) - scoreMemory(a));
+    selected.push(sorted[0]);
+    const suppressed = sorted.slice(1);
+    if (suppressed.length > 0) {
+      conflicts.push({
+        id: `conflict.${topic}`,
+        selectedMemoryId: sorted[0].id,
+        suppressedMemoryIds: suppressed.map((m) => m.id),
+        reason: 'Selected higher-priority memory for the same topic.',
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
+  return { selected, conflicts };
+}
+
+function conflictTopic(memory: MemoryItem): string {
+  if (memory.tags.length > 0) return memory.tags[0];
+  return memory.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function scoreMemory(memory: MemoryItem): number {
+  return scopePriority(memory.scope) * 100 + memory.confidence;
+}
+
+function scopePriority(scope: MemoryItem['scope']): number {
+  switch (scope) {
+    case 'repo': return 6;
+    case 'project': return 5;
+    case 'domain': return 4;
+    case 'user': return 3;
+    case 'global': return 2;
+    case 'task': return 7;
+    default: return 0;
+  }
+}
+
+function globMatch(pattern: string, value: string): boolean {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, '.*')
+    .replace(/\*/g, '[^/]*');
+  return new RegExp(`^${escaped}$`).test(value);
 }
 
 export function formatContextMarkdown(ctx: RetrievalContext, retrieved: RetrievedContext): string {

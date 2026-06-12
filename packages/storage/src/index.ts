@@ -5,4 +5,7 @@ export { atomicWriteFile, buildMarkdown, computeContentHash, serializeFrontmatte
 export { parseMemoryFile, parseMemoryMarkdown } from './markdown-reader.js';
 export type { ParsedMemoryFile } from './markdown-reader.js';
 export { retrieveContext, formatContextMarkdown } from './context-retrieval.js';
-export type { RetrievalContext, RetrievedContext, TopKLimits } from './context-retrieval.js';
+export { retrieveContextDebug } from './context-retrieval.js';
+export type { RetrievalContext, RetrievedContext, TopKLimits, ConflictReport, RetrievalDebugResult, RetrievalDebugStats } from './context-retrieval.js';
+export { detectProjectIdentity, normalizeGitRemoteUrl, readProjectProfile } from './project-identity.js';
+export type { ProjectIdentity, ProjectProfileDocument, DetectProjectIdentityInput } from './project-identity.js';

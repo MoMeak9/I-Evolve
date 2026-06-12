@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { validateMemory, validateObservation, validateAuditAction, detectCamelCaseKeys, schemas } from '@i-evolve/schema';
 
@@ -30,6 +30,11 @@ const { positionals, values } = parseArgs({
     'to-commit': { type: 'string' },
     to: { type: 'string' },
     'dry-run': { type: 'boolean' },
+    debug: { type: 'boolean' },
+    cwd: { type: 'string' },
+    project: { type: 'string' },
+    memory: { type: 'string' },
+    stdio: { type: 'boolean' },
   },
 });
 
@@ -70,14 +75,45 @@ if (command === 'daemon') {
 } else if (command === 'inject') {
   const { handleInject } = await import('./commands/inject.js');
   await handleInject(values);
+} else if (command === 'identity') {
+  const { handleIdentityCommand } = await import('./commands/identity.js');
+  await handleIdentityCommand(subcommand, values);
+} else if (command === 'retrieval') {
+  if (subcommand === 'explain') {
+    const memory = values.memory as string | undefined;
+    if (!memory) {
+      console.error('Usage: i-evolve retrieval explain --memory <id>');
+      process.exit(1);
+    }
+    console.log(`Memory ${memory} is selected when its scope/applies_to match the current identity and no higher-priority same-topic memory suppresses it.`);
+  } else {
+    console.error('Usage: i-evolve retrieval explain --memory <id>');
+    process.exit(1);
+  }
 } else if (command === 'session') {
   const { handleSessionCommand } = await import('./commands/session.js');
   await handleSessionCommand(subcommand, values);
-} else if (command === 'repair' && subcommand === 'stale-lock') {
-  const { ProcessLock } = await import('@i-evolve/daemon');
-  const lock = new ProcessLock();
-  lock.repair();
-  console.log('Stale lock removed.');
+} else if (command === 'repair') {
+  const { ProcessLock, paths } = await import('@i-evolve/daemon');
+  if (subcommand === 'stale-lock') {
+    const lock = new ProcessLock();
+    lock.repair();
+    console.log('Stale lock removed.');
+  } else if (subcommand === 'rebuild-index') {
+    const { MarkdownMemoryRepository } = await import('@i-evolve/storage');
+    const repo = new MarkdownMemoryRepository({ memoryDir: paths.shared.memory, dbPath: join(paths.base, 'shared', 'index.db') });
+    const result = repo.rebuildIndex();
+    repo.close();
+    console.log(`Index rebuilt: ${result.total} memories indexed, ${result.errors} errors.`);
+  } else if (subcommand === 'verify-hashes') {
+    const { validateMemoryRepo } = await import('@i-evolve/git-sync');
+    const report = validateMemoryRepo(paths.shared.memory);
+    console.log(report.ok ? 'Memory hashes verified.' : `Hash/schema verification failed: ${report.issues.length} issue(s).`);
+    if (!report.ok) process.exit(1);
+  } else {
+    console.error('Usage: i-evolve repair <stale-lock|rebuild-index|verify-hashes>');
+    process.exit(1);
+  }
 } else if (command === 'memory') {
   const { handleMemoryCommand } = await import('./commands/memory.js');
   await handleMemoryCommand(subcommand, rest, values);
@@ -93,6 +129,9 @@ if (command === 'daemon') {
 } else if (command === 'migrate') {
   const { handleMigrateCommand } = await import('./commands/migrate.js');
   await handleMigrateCommand(subcommand, values);
+} else if (command === 'mcp') {
+  const { handleMcpCommand } = await import('./commands/mcp.js');
+  await handleMcpCommand(subcommand, values);
 } else if (command === 'schema' && subcommand === 'validate') {
   const file = rest[0];
   if (!file) {
@@ -150,10 +189,16 @@ if (command === 'daemon') {
   console.log(JSON.stringify(schemas[name], null, 2));
 } else if (command === 'doctor') {
   const { sendRequest, paths } = await import('@i-evolve/daemon');
+  const { GitMemorySync } = await import('@i-evolve/git-sync');
+  const { readSchemaVersion } = await import('@i-evolve/git-sync');
   console.log('i-evolve doctor');
   console.log('  Node.js:', process.version);
   console.log('  Platform:', process.platform);
   console.log('  Data dir:', paths.base);
+  console.log('  Memory repo:', existsSync(paths.shared.memory) ? 'exists' : 'missing');
+  console.log('  Schema version:', readSchemaVersion(paths.shared.memory));
+  console.log('  SQLite index:', existsSync(join(paths.base, 'shared', 'index.db')) ? 'exists' : 'missing');
+  console.log('  Audit log:', existsSync(paths.audit.dir) ? 'exists' : 'missing');
 
   try {
     const resp = await sendRequest({ type: 'health' });
@@ -163,6 +208,23 @@ if (command === 'daemon') {
   } catch {
     console.log('  Daemon: not running');
   }
+
+  try {
+    const sync = new GitMemorySync(paths.shared.memory);
+    if (sync.isInitialized()) {
+      const status = sync.status();
+      console.log('  Git branch:', status.branch);
+      console.log('  Git clean:', status.clean);
+      console.log('  Git commit:', status.commit.slice(0, 8));
+      console.log('  Remote memory:', 'initialized');
+    } else {
+      console.log('  Remote memory: not initialized');
+    }
+  } catch {
+    console.log('  Remote memory: unavailable');
+  }
+
+  console.log('  MCP server:', 'available via i-evolve mcp start --stdio');
 
   if (values.bootstrap) {
     console.log('  Bootstrap: OK');

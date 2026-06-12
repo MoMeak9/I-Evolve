@@ -1,0 +1,16 @@
+{
+  "name": "@i-evolve/dashboard",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/main.ts --format esm",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@i-evolve/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0"
+  }
+}
