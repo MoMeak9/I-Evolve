@@ -1,8 +1,14 @@
-# I-Evolve Release Checklist
+# I-Evolve Release Checklist / I-Evolve 发布检查清单
 
-Use this checklist before publishing CLI, daemon, MCP server, Claude plugin, or memory schema changes.
+## 中文
 
-## Required Commands
+发布 CLI、daemon、MCP server、Claude plugin 或 memory schema 变更前，使用此清单确认安装、测试、MCP、Dashboard 和治理链路可用。
+
+## English
+
+Use this checklist before publishing CLI, daemon, MCP server, Claude plugin, or memory schema changes. It verifies installation, tests, MCP, Dashboard, and governance flows.
+
+## 必跑命令 / Required Commands
 
 ```bash
 pnpm build
@@ -18,7 +24,23 @@ i-evolve mcp status
 i-evolve dashboard bridge --port 17361
 ```
 
-## Gates
+## 发布门禁 / Gates
+
+中文：
+
+- Schema fixtures 通过。
+- Integration tests 通过。
+- Pollution tests 通过。
+- Secret / PII 安全检查通过。
+- Migration dry-run 不写入文件。
+- MCP server smoke test 通过。
+- Dashboard bridge smoke test 通过。
+- Setup dry-run 会打印 Codex MCP 与 Claude Code plugin 安装目标。
+- `scripts/install.sh` 可执行且已有文档说明。
+- Claude plugin package 文件存在。
+- Doctor 能报告 CLI、daemon、store、SQLite/FTS、plugin、MCP、remote memory 状态。
+
+English:
 
 - Schema fixtures pass.
 - Integration tests pass.
@@ -32,7 +54,15 @@ i-evolve dashboard bridge --port 17361
 - Claude plugin package files are present.
 - Doctor reports CLI, daemon, store, SQLite/FTS, plugin, MCP, and remote memory status.
 
-## Memory Versioning
+## Memory 版本 / Memory Versioning
+
+中文：
+
+- Code package version 与 memory Git version 独立。
+- `schema_version` 变更必须通过 migration。
+- Memory Git tag 使用 `memory-YYYY.MM.DD` 格式。
+
+English:
 
 - Code package versions and memory Git versions are independent.
 - `schema_version` changes must go through migration.

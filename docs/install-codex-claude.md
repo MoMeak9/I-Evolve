@@ -1,21 +1,37 @@
-# Install I-Evolve For Codex And Claude Code
+# Install I-Evolve For Codex And Claude Code / 为 Codex 和 Claude Code 安装 I-Evolve
+
+## 中文
+
+这份文档说明如何安装 I-Evolve，让 Codex 和 Claude Code 共用同一个本地 daemon-backed memory。
+
+## English
 
 This guide installs I-Evolve so Codex and Claude Code can use the same local daemon-backed memory.
 
-## Requirements
+## 环境要求 / Requirements
+
+中文：
 
 - Node.js 20+
 - pnpm 9+
 - Git
 
-## One-Command Setup
+English:
+
+- Node.js 20+
+- pnpm 9+
+- Git
+
+## 一条命令安装 / One-Command Setup
 
 ```bash
 cd /path/to/I-Evolve
 ./scripts/install.sh all
 ```
 
-The script runs:
+中文：脚本会执行：
+
+English: The script runs:
 
 ```bash
 pnpm install
@@ -25,13 +41,17 @@ pnpm tsx apps/cli/src/index.ts setup all --project-root /path/to/I-Evolve
 
 ## Codex
 
-Setup command:
+中文：配置 Codex：
+
+English: Configure Codex:
 
 ```bash
 pnpm tsx apps/cli/src/index.ts setup codex
 ```
 
-It updates `~/.codex/config.toml` with:
+中文：该命令会更新 `~/.codex/config.toml`，加入：
+
+English: This updates `~/.codex/config.toml` with:
 
 ```toml
 [mcp_servers.i-evolve]
@@ -48,14 +68,18 @@ args = [
 startup_timeout_sec = 30
 ```
 
-Restart Codex after setup. Start the daemon before using MCP tools:
+中文：配置完成后重启 Codex。使用 MCP tools 前先启动 daemon：
+
+English: Restart Codex after setup. Start the daemon before using MCP tools:
 
 ```bash
 pnpm tsx apps/cli/src/index.ts daemon start
 pnpm tsx apps/cli/src/index.ts mcp status
 ```
 
-Available MCP tools:
+中文：可用 MCP tools：
+
+English: Available MCP tools:
 
 - `recall`
 - `remember`
@@ -67,19 +91,25 @@ Available MCP tools:
 
 ## Claude Code
 
-Setup command:
+中文：安装 Claude Code plugin：
+
+English: Install the Claude Code plugin:
 
 ```bash
 pnpm tsx apps/cli/src/index.ts setup claude-code
 ```
 
-It copies the plugin bundle to:
+中文：该命令会把 plugin bundle 复制到：
+
+English: This copies the plugin bundle to:
 
 ```text
 ~/.claude/plugins/i-evolve
 ```
 
-Installed plugin contents:
+中文：安装内容：
+
+English: Installed plugin contents:
 
 - `.claude-plugin/plugin.json`
 - `hooks/hooks.json`
@@ -89,42 +119,54 @@ Installed plugin contents:
 - `skills/audit/SKILL.md`
 - `skills/explain-memory/SKILL.md`
 
-Restart Claude Code after setup so hooks and skills are loaded.
+中文：安装后重启 Claude Code，使 hooks 和 skills 生效。
 
-## Project Identity
+English: Restart Claude Code after setup so hooks and skills are loaded.
 
-Bind a repository to a stable project identity:
+## 项目身份 / Project Identity
+
+中文：为当前仓库绑定稳定项目身份：
+
+English: Bind a repository to a stable project identity:
 
 ```bash
 pnpm tsx apps/cli/src/index.ts identity bind --project my-project --domain my-domain
 ```
 
-This writes a `project-profile.md` file in the memory store.
+中文：该命令会在 memory store 中写入 `project-profile.md`。
 
-## Health Check
+English: This writes a `project-profile.md` file in the memory store.
+
+## 健康检查 / Health Check
 
 ```bash
 pnpm tsx apps/cli/src/index.ts doctor --bootstrap
 pnpm tsx apps/cli/src/index.ts mcp status
 ```
 
-Expected:
+中文：期望看到：
 
-- daemon running
-- memory repo exists
-- SQLite/FTS available
-- MCP server ready
-- Claude plugin present in the source tree
+English: Expected:
 
-## Dry Run
+- daemon running / daemon 正在运行
+- memory repo exists / memory repo 存在
+- SQLite/FTS available / SQLite/FTS 可用
+- MCP server ready / MCP server 就绪
+- Claude plugin present in the source tree / 源码中存在 Claude plugin
 
-Preview all file writes:
+## Dry Run / 仅预览不写入
+
+中文：预览所有文件写入：
+
+English: Preview all file writes:
 
 ```bash
 pnpm tsx apps/cli/src/index.ts setup all --dry-run
 ```
 
-Use custom paths in tests or managed environments:
+中文：测试或受管环境中可以指定自定义路径：
+
+English: Use custom paths in tests or managed environments:
 
 ```bash
 pnpm tsx apps/cli/src/index.ts setup codex \
@@ -136,17 +178,28 @@ pnpm tsx apps/cli/src/index.ts setup claude-code \
   --project-root /path/to/I-Evolve
 ```
 
-## Troubleshooting
+## 排障 / Troubleshooting
 
-If Codex does not show I-Evolve tools:
+中文：如果 Codex 中看不到 I-Evolve tools：
 
-1. Confirm `~/.codex/config.toml` contains `[mcp_servers.i-evolve]`.
-2. Restart Codex.
-3. Start the daemon: `pnpm tsx apps/cli/src/index.ts daemon start`.
-4. Check MCP status: `pnpm tsx apps/cli/src/index.ts mcp status`.
+English: If Codex does not show I-Evolve tools:
 
-If Claude Code skills do not appear:
+1. 确认 `~/.codex/config.toml` 包含 `[mcp_servers.i-evolve]`。  
+   Confirm `~/.codex/config.toml` contains `[mcp_servers.i-evolve]`.
+2. 重启 Codex。  
+   Restart Codex.
+3. 启动 daemon：`pnpm tsx apps/cli/src/index.ts daemon start`。  
+   Start the daemon: `pnpm tsx apps/cli/src/index.ts daemon start`.
+4. 检查 MCP 状态：`pnpm tsx apps/cli/src/index.ts mcp status`。  
+   Check MCP status: `pnpm tsx apps/cli/src/index.ts mcp status`.
 
-1. Confirm `~/.claude/plugins/i-evolve/.claude-plugin/plugin.json` exists.
-2. Restart Claude Code.
-3. Run the `init` skill or manually run `i-evolve doctor --bootstrap`.
+中文：如果 Claude Code skills 没有出现：
+
+English: If Claude Code skills do not appear:
+
+1. 确认 `~/.claude/plugins/i-evolve/.claude-plugin/plugin.json` 存在。  
+   Confirm `~/.claude/plugins/i-evolve/.claude-plugin/plugin.json` exists.
+2. 重启 Claude Code。  
+   Restart Claude Code.
+3. 运行 `init` skill，或手动执行 `i-evolve doctor --bootstrap`。  
+   Run the `init` skill or manually run `i-evolve doctor --bootstrap`.

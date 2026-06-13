@@ -2,6 +2,14 @@
 
 Date: 2026-06-13
 
+## 中文摘要
+
+本报告记录 MVP6-8 从 prototype 推进到可验收状态的实现结果。当前实现已经覆盖跨仓召回、MCP 多客户端共享、Dashboard/doctor/repair/release hardening，以及 Codex / Claude Code 的零门槛 setup 入口。
+
+## English Summary
+
+This report records the work that upgraded MVP6-8 from a prototype to an acceptance-ready implementation. The current implementation covers cross-repo retrieval, MCP multi-client sharing, Dashboard/doctor/repair/release hardening, and zero-entry setup for Codex / Claude Code.
+
 ## Summary
 
 This pass upgrades the previous MVP6-8 foundation into executable acceptance coverage for `docs/i-evolve-mvp-specs/07` through `09`.
@@ -63,6 +71,10 @@ Evidence:
 - `packages/daemon/src/daemon.test.ts`
 
 ## Verification
+
+中文：本轮验收执行了以下命令，结果全部通过。
+
+English: The following verification commands were run for this acceptance pass, and all passed.
 
 Run for this acceptance pass:
 
