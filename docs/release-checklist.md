@@ -8,6 +8,8 @@ Use this checklist before publishing CLI, daemon, MCP server, Claude plugin, or 
 pnpm build
 pnpm test
 pnpm typecheck
+./scripts/install.sh all
+pnpm tsx apps/cli/src/index.ts setup all --dry-run
 i-evolve repair verify-hashes
 i-evolve repair audit-log --dry-run
 i-evolve repair git-cleanup --dry-run
@@ -25,6 +27,8 @@ i-evolve dashboard bridge --port 17361
 - Migration dry-run does not write files.
 - MCP server smoke test passes.
 - Dashboard bridge smoke test passes.
+- Setup dry-run prints Codex MCP and Claude Code plugin install targets.
+- `scripts/install.sh` is executable and documented.
 - Claude plugin package files are present.
 - Doctor reports CLI, daemon, store, SQLite/FTS, plugin, MCP, and remote memory status.
 

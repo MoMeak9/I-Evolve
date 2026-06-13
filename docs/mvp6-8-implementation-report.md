@@ -44,6 +44,9 @@ Evidence:
 
 Implemented:
 
+- Zero-entry setup commands for Codex MCP and Claude Code plugin installation.
+- `scripts/install.sh` for dependency install, build, setup, memory init, and doctor.
+- User-facing install docs in `README.md` and `docs/install-codex-claude.md`.
 - Functional static dashboard panels for Memories, Audit, Conflicts, Daemon Status, Git Status, and Settings.
 - Dashboard actions for forget, deprecate, and rollback routed through the daemon client.
 - Local dashboard HTTP bridge for documented endpoints including `/health`, `/memories`, `/audit`, `/conflicts`, `/git/status`, `/index/rebuild`, and memory actions.
@@ -54,6 +57,7 @@ Implemented:
 
 Evidence:
 
+- `tests/setup.test.ts`
 - `tests/dashboard.test.ts`
 - `tests/pollution.test.ts`
 - `packages/daemon/src/daemon.test.ts`
@@ -67,14 +71,16 @@ pnpm test
 pnpm typecheck
 pnpm build
 node --import tsx <dashboard bridge smoke>
+pnpm tsx apps/cli/src/index.ts setup all --dry-run --project-root /tmp/i-evolve-demo --codex-config /tmp/codex/config.toml --claude-plugin-dir /tmp/claude/plugins/i-evolve
 ```
 
 Observed:
 
-- `pnpm test`: 12 test files, 122 tests passed.
+- `pnpm test`: 13 test files, 126 tests passed.
 - `pnpm typecheck`: all workspace typecheck scripts passed.
 - `pnpm build`: all workspace build scripts passed.
 - Dashboard bridge smoke: `GET /health` returned HTTP 200 with daemon status `running`.
+- Setup dry-run smoke: printed Codex MCP config and Claude Code plugin targets without writing real user config.
 
 ## Remaining Non-Blocking Hardening
 

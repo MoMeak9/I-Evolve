@@ -36,6 +36,9 @@ const { positionals, values } = parseArgs({
     memory: { type: 'string' },
     stdio: { type: 'boolean' },
     port: { type: 'string' },
+    'project-root': { type: 'string' },
+    'codex-config': { type: 'string' },
+    'claude-plugin-dir': { type: 'string' },
   },
 });
 
@@ -56,6 +59,9 @@ Commands:
   observe <json>               Append an observation (requires daemon)
   schema validate <file>       Validate a YAML/JSON file against its schema
   schema print <name>          Print a JSON schema (memory | observation | audit-action)
+  setup all                    Install CLI dependencies and configure Codex/Claude Code
+  setup codex                  Configure Codex MCP server
+  setup claude-code            Install Claude Code plugin
   doctor --bootstrap           Check system health
   repair stale-lock            Remove stale daemon lock`);
   process.exit(0);
@@ -162,6 +168,9 @@ if (command === 'daemon') {
   }
   const { startDashboardBridge } = await import('@i-evolve/dashboard/bridge');
   startDashboardBridge(values.port ? Number(values.port) : undefined);
+} else if (command === 'setup') {
+  const { handleSetupCommand } = await import('./commands/setup.js');
+  await handleSetupCommand(subcommand, values);
 } else if (command === 'schema' && subcommand === 'validate') {
   const file = rest[0];
   if (!file) {
