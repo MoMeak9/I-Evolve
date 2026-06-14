@@ -1508,6 +1508,7 @@ Stop：finalize session，并触发 AI 自动提炼与审核。
 MVP Skills：
 
 ```text
+/i-evolve:onboarding
 /i-evolve:init
 /i-evolve:remember
 /i-evolve:audit

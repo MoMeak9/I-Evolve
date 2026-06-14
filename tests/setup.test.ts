@@ -58,6 +58,7 @@ describe('setup command helpers', () => {
 
       expect(existsSync(join(dir, 'i-evolve', '.claude-plugin', 'plugin.json'))).toBe(true);
       expect(existsSync(join(dir, 'i-evolve', 'hooks', 'hooks.json'))).toBe(true);
+      expect(existsSync(join(dir, 'i-evolve', 'skills', 'onboarding', 'SKILL.md'))).toBe(true);
       expect(existsSync(join(dir, 'i-evolve', 'skills', 'remember', 'SKILL.md'))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -70,7 +71,9 @@ describe('setup command helpers', () => {
     const script = join(process.cwd(), 'scripts', 'install.sh');
     expect(existsSync(script)).toBe(true);
     expect(statSync(script).mode & 0o111).toBeGreaterThan(0);
-    expect(readFileSync(join(process.cwd(), 'docs', 'install-codex-claude.md'), 'utf-8')).toContain('setup codex');
+    const installDocs = readFileSync(join(process.cwd(), 'docs', 'install-codex-claude.md'), 'utf-8');
+    expect(installDocs).toContain('setup codex');
+    expect(installDocs).toContain('skills/onboarding/SKILL.md');
   });
 });
 

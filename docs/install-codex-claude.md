@@ -113,6 +113,7 @@ English: Installed plugin contents:
 
 - `.claude-plugin/plugin.json`
 - `hooks/hooks.json`
+- `skills/onboarding/SKILL.md`
 - `skills/init/SKILL.md`
 - `skills/remember/SKILL.md`
 - `skills/forget/SKILL.md`

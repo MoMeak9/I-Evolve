@@ -1259,6 +1259,7 @@ packages/claude-plugin/
   hooks/
     hooks.json
   skills/
+    onboarding/SKILL.md
     init/SKILL.md
     remember/SKILL.md
     audit/SKILL.md
@@ -1399,6 +1400,7 @@ warnings Top 3
 ## 8. Skills
 
 ```text
+/i-evolve:onboarding
 /i-evolve:init
 /i-evolve:remember
 /i-evolve:audit
