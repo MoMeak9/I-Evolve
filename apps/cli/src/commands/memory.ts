@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { MarkdownMemoryRepository } from '@i-evolve/storage';
 import { paths } from '@i-evolve/daemon';
 import { parseMemoryMarkdown } from '@i-evolve/storage';
@@ -13,6 +13,18 @@ function getRepo() {
   return new MarkdownMemoryRepository({ memoryDir, dbPath });
 }
 
+/**
+ * Ensure the repo carries a memory-pack.yaml manifest. Required by the push
+ * validator and the migration runner; create it at the baseline schema version
+ * when missing so a freshly initialized repo can sync. Returns true if created.
+ */
+function ensureMemoryPack(memoryDir: string): boolean {
+  const packPath = join(memoryDir, 'memory-pack.yaml');
+  if (existsSync(packPath)) return false;
+  writeFileSync(packPath, 'id: team.default\nschema_version: 1\n', 'utf-8');
+  return true;
+}
+
 export async function handleMemoryCommand(subcommand: string | undefined, args: string[], flags: Record<string, unknown>): Promise<void> {
   switch (subcommand) {
     case 'remote': {
@@ -23,7 +35,9 @@ export async function handleMemoryCommand(subcommand: string | undefined, args: 
     case 'init-local': {
       const repo = getRepo();
       repo.close();
+      const created = ensureMemoryPack(paths.shared.memory);
       console.log('Memory repository initialized.');
+      if (created) console.log('Created memory-pack.yaml (schema_version: 1).');
       break;
     }
     case 'add': {

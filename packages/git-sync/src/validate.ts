@@ -49,7 +49,7 @@ export function validateMemoryRepo(repoDir: string, options: ValidateOptions = {
       if (s.isDirectory()) {
         if (entry === '.git' || entry === 'tombstones' || entry === 'audit' || entry === 'migrations') continue;
         scan(full);
-      } else if (entry.endsWith('.md') && entry !== 'README.md' && entry !== 'CHANGELOG.md') {
+      } else if (entry.endsWith('.md') && entry !== 'README.md' && entry !== 'CHANGELOG.md' && entry !== 'project-profile.md') {
         checkedFiles++;
         validateFile(full, repoDir, seenIds, tombstoneIds, now, issues);
       }

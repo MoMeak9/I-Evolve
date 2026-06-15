@@ -197,6 +197,15 @@ export class GitMemorySync {
       if (!report.ok) {
         return { ok: false, message: `validation failed: ${report.issues.length} issue(s); push blocked` };
       }
+      // Commit any pending working-tree changes (e.g. memories written by
+      // `memory add`, which only touch files) so they are actually pushed.
+      // Without this, push would no-op on an uncommitted tree yet still report
+      // success. The tree was just validated above, so committing it is safe.
+      const before = this.safeCurrentCommit();
+      git(this.repoDir, ['add', '-A']);
+      if (!isClean(this.repoDir)) {
+        git(this.repoDir, ['commit', '-m', this.buildCommitMessage({ message: 'memory: sync pending changes' })]);
+      }
       if (this.hasUpstream()) {
         git(this.repoDir, ['push']);
       } else {
@@ -204,7 +213,7 @@ export class GitMemorySync {
         git(this.repoDir, ['push', '-u', 'origin', branch]);
       }
       const commit = currentCommit(this.repoDir);
-      options.appendAudit?.(this.buildAuditAction('sync_push', 'git push completed', commit, commit));
+      options.appendAudit?.(this.buildAuditAction('sync_push', 'git push completed', before, commit));
       return { ok: true, message: 'pushed', commit };
     });
   }

@@ -56,7 +56,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  rmSync(base, { recursive: true, force: true });
+  // git can write into .git (hooks, gc) asynchronously after a command returns,
+  // racing the recursive remove and throwing ENOTEMPTY/EBUSY on some platforms
+  // (notably macOS). A failed cleanup leaks state into the next test, so retry.
+  rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 describe('GitWorkspaceLock', () => {
@@ -117,6 +120,22 @@ describe('GitMemorySync', () => {
     await sync.commit({ message: 'memory(auto): initial' });
     const result = await sync.push();
     expect(result.ok).toBe(true);
+  });
+
+  it('commits pending working-tree changes before pushing', async () => {
+    const sync = new GitMemorySync(workDir);
+    await sync.commit({ message: 'memory(auto): initial' });
+    // Write a new memory but do NOT commit it (mimics `memory add`).
+    writeMemory(workDir, 'project.demo.uncommitted');
+    expect(sync.status().clean).toBe(false);
+
+    const result = await sync.push();
+
+    expect(result.ok).toBe(true);
+    // The pending change is committed (tree clean) and lands in a real commit.
+    expect(sync.status().clean).toBe(true);
+    const head = execFileSync('git', ['ls-tree', '-r', '--name-only', 'HEAD'], { cwd: workDir, encoding: 'utf-8' });
+    expect(head).toContain(join('projects', 'demo', 'uncommitted.md'));
   });
 
   it('audits push after validation succeeds', async () => {
@@ -270,6 +289,22 @@ describe('validateMemoryRepo', () => {
     writeMemory(workDir, 'project.demo.a-fact');
     const report = validateMemoryRepo(workDir);
     expect(report.ok).toBe(true);
+    expect(report.checkedFiles).toBe(1);
+  });
+
+  it('skips project-profile.md identity documents', () => {
+    writeMemory(workDir, 'project.demo.a-fact');
+    const sub = join(workDir, 'projects', 'demo');
+    mkdirSync(sub, { recursive: true });
+    // Identity profile written by bindProjectIdentity: type=project_profile, not a memory.
+    writeFileSync(join(sub, 'project-profile.md'), [
+      '---', 'id: project.demo.profile', 'type: project_profile', 'project_id: demo',
+      'repo_ids:', '  - acme/demo', 'domains:', '  - app', 'package_names:',
+      '  - "@demo/app"', 'status: active', '---', '', '# demo', '',
+    ].join('\n'), 'utf-8');
+    const report = validateMemoryRepo(workDir);
+    expect(report.ok).toBe(true);
+    // Only the real memory is checked; the profile is skipped.
     expect(report.checkedFiles).toBe(1);
   });
 
