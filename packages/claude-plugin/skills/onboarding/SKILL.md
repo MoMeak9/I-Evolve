@@ -45,15 +45,28 @@ i-evolve mcp status
 
 Healthy output should show the daemon running, local memory initialized, SQLite/FTS available, and MCP ready.
 
-## 4. Bind Project Identity
+## 4. Bind Project Identity And Shared Memory
 
-When the repository needs stable cross-session recall:
+For a first-time repository, run the guided wizard. It starts the daemon, binds
+identity after confirmation, and asks which remote git repo to use as shared
+memory:
 
 ```bash
-i-evolve identity bind --project <project-id> --domain <domain>
+i-evolve init
+```
+
+Without an interactive terminal, detect first, ask the user for the project id /
+domain and which git remote to use as memory, then apply non-interactively:
+
+```bash
+i-evolve identity detect
+i-evolve init --yes --project <project-id> --domain <domain> --remote <git-url>
+# or --skip-remote for local-only memory
 ```
 
 Use short, durable identifiers such as `billing-api`, `web-editor`, or `mobile-app`.
+The `init` and `inject`/`observe` hooks auto-start the daemon, so it does not need
+to be started by hand.
 
 ## 5. Daily Use
 

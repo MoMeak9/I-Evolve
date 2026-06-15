@@ -39,6 +39,10 @@ const { positionals, values } = parseArgs({
     'project-root': { type: 'string' },
     'codex-config': { type: 'string' },
     'claude-plugin-dir': { type: 'string' },
+    yes: { type: 'boolean', short: 'y' },
+    'non-interactive': { type: 'boolean' },
+    remote: { type: 'string' },
+    'skip-remote': { type: 'boolean' },
   },
 });
 
@@ -57,6 +61,7 @@ Commands:
   daemon stop                  Stop the daemon
   daemon status                Show daemon status
   observe <json>               Append an observation (requires daemon)
+  init                         Start daemon, bind project, and wire shared memory (interactive)
   schema validate <file>       Validate a YAML/JSON file against its schema
   schema print <name>          Print a JSON schema (memory | observation | audit-action)
   setup all                    Install CLI dependencies and configure Codex/Claude Code
@@ -82,6 +87,9 @@ if (command === 'daemon') {
 } else if (command === 'inject') {
   const { handleInject } = await import('./commands/inject.js');
   await handleInject(values);
+} else if (command === 'init') {
+  const { handleInitCommand } = await import('./commands/init.js');
+  await handleInitCommand(values);
 } else if (command === 'identity') {
   const { handleIdentityCommand } = await import('./commands/identity.js');
   await handleIdentityCommand(subcommand, values);

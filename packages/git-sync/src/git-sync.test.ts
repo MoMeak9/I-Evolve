@@ -193,6 +193,73 @@ describe('GitMemorySync', () => {
   });
 });
 
+describe('GitMemorySync.attach', () => {
+  const seedDir = join(base, 'seed');
+  const targetDir = join(base, 'target');
+
+  // Build a non-empty remote with shared.md + projects/remote.md on the default branch.
+  function buildPopulatedRemote(): void {
+    mkdirSync(remoteDir, { recursive: true });
+    execFileSync('git', ['init', '--bare', '-b', 'main'], { cwd: remoteDir });
+    gitInit(seedDir);
+    execFileSync('git', ['symbolic-ref', 'HEAD', 'refs/heads/main'], { cwd: seedDir });
+    execFileSync('git', ['remote', 'add', 'origin', remoteDir], { cwd: seedDir });
+    writeFileSync(join(seedDir, 'shared.md'), 'remote-version\n', 'utf-8');
+    mkdirSync(join(seedDir, 'projects'), { recursive: true });
+    writeFileSync(join(seedDir, 'projects', 'remote.md'), 'remote-only\n', 'utf-8');
+    execFileSync('git', ['add', '-A'], { cwd: seedDir });
+    execFileSync('git', ['commit', '-m', 'seed'], { cwd: seedDir });
+    execFileSync('git', ['push', '-u', 'origin', 'main'], { cwd: seedDir });
+  }
+
+  it('clones into an empty directory', () => {
+    buildPopulatedRemote();
+    mkdirSync(targetDir, { recursive: true });
+    const result = new GitMemorySync(targetDir).attach(remoteDir);
+    expect(result.ok).toBe(true);
+    expect(result.collisions).toEqual([]);
+    expect(existsSync(join(targetDir, '.git'))).toBe(true);
+    expect(existsSync(join(targetDir, 'shared.md'))).toBe(true);
+  });
+
+  it('merges into a non-empty directory, keeping remote on collisions and restoring local-only files', () => {
+    buildPopulatedRemote();
+    mkdirSync(join(targetDir, 'projects'), { recursive: true });
+    writeFileSync(join(targetDir, 'shared.md'), 'local-version\n', 'utf-8'); // collides
+    writeFileSync(join(targetDir, 'projects', 'local.md'), 'local-only\n', 'utf-8'); // unique
+
+    const result = new GitMemorySync(targetDir).attach(remoteDir);
+
+    expect(result.ok).toBe(true);
+    expect(result.collisions).toEqual(['shared.md']);
+    expect(result.restored).toContain(join('projects', 'local.md'));
+    // Remote wins on the colliding path.
+    expect(readFileSync(join(targetDir, 'shared.md'), 'utf-8')).toBe('remote-version\n');
+    // Remote-only file is present.
+    expect(existsSync(join(targetDir, 'projects', 'remote.md'))).toBe(true);
+    // Local-only file is restored.
+    expect(readFileSync(join(targetDir, 'projects', 'local.md'), 'utf-8')).toBe('local-only\n');
+    expect(existsSync(join(targetDir, '.git'))).toBe(true);
+  });
+
+  it('is a no-op when already initialized', () => {
+    buildPopulatedRemote();
+    mkdirSync(targetDir, { recursive: true });
+    new GitMemorySync(targetDir).attach(remoteDir);
+    const second = new GitMemorySync(targetDir).attach(remoteDir);
+    expect(second.message).toBe('already initialized');
+  });
+
+  it('rolls back local files when the clone fails', () => {
+    mkdirSync(targetDir, { recursive: true });
+    writeFileSync(join(targetDir, 'keep.md'), 'precious\n', 'utf-8');
+    expect(() => new GitMemorySync(targetDir).attach(join(base, 'does-not-exist.git'))).toThrow();
+    // Original file survives the failed attach.
+    expect(readFileSync(join(targetDir, 'keep.md'), 'utf-8')).toBe('precious\n');
+    expect(existsSync(join(targetDir, '.git'))).toBe(false);
+  });
+});
+
 describe('validateMemoryRepo', () => {
   beforeEach(() => {
     mkdirSync(workDir, { recursive: true });

@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { git, isClean, currentCommit, GitError } from './git.js';
 import { GitWorkspaceLock } from './workspace-lock.js';
 import { validateMemoryRepo, type ValidateReport } from './validate.js';
@@ -27,6 +28,15 @@ export interface SyncResult {
   previousCommit?: string;
 }
 
+export interface AttachResult {
+  ok: boolean;
+  message: string;
+  /** Local files kept because the remote already provided that path. */
+  collisions: string[];
+  /** Local-only files restored on top of the cloned remote. */
+  restored: string[];
+}
+
 export interface GitChangeOptions {
   rebuildIndex?: () => void;
   appendAudit?: (action: AuditAction) => void;
@@ -46,6 +56,93 @@ export class GitMemorySync {
   static clone(gitUrl: string, targetDir: string): void {
     // Clones into targetDir (parent must exist). No lock needed: repo doesn't exist yet.
     git(targetDir, ['clone', gitUrl, '.']);
+  }
+
+  /**
+   * Attach an existing (possibly non-empty) memory dir to a remote git repo.
+   *
+   * - Already a git repo: no-op.
+   * - Empty dir: plain clone.
+   * - Non-empty dir: move local files aside, clone the remote in, then restore
+   *   only the local-only files on top. Files that also exist in the remote are
+   *   left as the remote version and reported as collisions; the local copies
+   *   remain in the backup dir so nothing is lost. Restored local-only files are
+   *   left uncommitted so the caller can review and commit them.
+   *
+   * On clone failure the original local files are moved back, leaving the dir
+   * exactly as it was before.
+   */
+  attach(gitUrl: string): AttachResult {
+    if (this.isInitialized()) {
+      return { ok: true, message: 'already initialized', collisions: [], restored: [] };
+    }
+    if (!existsSync(this.repoDir)) {
+      GitMemorySync.clone(gitUrl, this.repoDir);
+      return { ok: true, message: `cloned ${gitUrl}`, collisions: [], restored: [] };
+    }
+
+    const localFiles = this.listFiles(this.repoDir);
+    if (localFiles.length === 0) {
+      GitMemorySync.clone(gitUrl, this.repoDir);
+      return { ok: true, message: `cloned ${gitUrl}`, collisions: [], restored: [] };
+    }
+
+    const backup = mkdtempSync(join(dirname(this.repoDir), '.i-evolve-attach-'));
+    for (const entry of readdirSync(this.repoDir)) {
+      renameSync(join(this.repoDir, entry), join(backup, entry));
+    }
+
+    try {
+      GitMemorySync.clone(gitUrl, this.repoDir);
+    } catch (err) {
+      // Roll back: restore original files, remove the backup.
+      for (const entry of readdirSync(backup)) {
+        renameSync(join(backup, entry), join(this.repoDir, entry));
+      }
+      this.removeDir(backup);
+      throw err instanceof GitError
+        ? err
+        : new GitError(`attach failed: ${(err as Error).message}`);
+    }
+
+    const collisions: string[] = [];
+    const restored: string[] = [];
+    for (const rel of this.listFiles(backup)) {
+      const target = join(this.repoDir, rel);
+      if (existsSync(target)) {
+        collisions.push(rel);
+      } else {
+        cpSync(join(backup, rel), target);
+        restored.push(rel);
+      }
+    }
+
+    const message = `cloned ${gitUrl}; restored ${restored.length} local file(s)` +
+      (collisions.length ? `, ${collisions.length} kept remote (backup: ${backup})` : '');
+    if (collisions.length === 0) this.removeDir(backup);
+    return { ok: true, message, collisions, restored };
+  }
+
+  private listFiles(dir: string): string[] {
+    const out: string[] = [];
+    const walk = (current: string) => {
+      for (const entry of readdirSync(current)) {
+        if (entry === '.git') continue;
+        const full = join(current, entry);
+        if (statSync(full).isDirectory()) walk(full);
+        else out.push(relative(dir, full));
+      }
+    };
+    walk(dir);
+    return out;
+  }
+
+  private removeDir(dir: string): void {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // best effort
+    }
   }
 
   isInitialized(): boolean {

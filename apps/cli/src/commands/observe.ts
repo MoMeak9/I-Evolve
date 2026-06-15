@@ -77,6 +77,20 @@ export async function handleObserve(jsonArg: string | undefined, flags: ObserveF
     }
   } catch (err) {
     if (err instanceof DaemonNotRunningError) {
+      // Try to auto-start the daemon, then retry the observation once.
+      const { ensureDaemon } = await import('./ensure-daemon.js');
+      const { running } = await ensureDaemon();
+      if (running) {
+        try {
+          const resp = await sendRequest({ type: 'observe', payload });
+          if (resp.ok) {
+            console.log(`Observation appended: ${(resp.data as { id: string }).id}`);
+            return;
+          }
+        } catch {
+          // fall through to skip
+        }
+      }
       console.error('Warning: i-evolve daemon not running; observation skipped.');
       return;
     }

@@ -16,6 +16,10 @@ function getRepo(): MarkdownMemoryRepository {
 }
 
 export async function handleInject(flags: Record<string, unknown>): Promise<void> {
+  // Auto-start the daemon so SessionStart context is available on first run.
+  const { ensureDaemon } = await import('./ensure-daemon.js');
+  await ensureDaemon();
+
   const detected = detectProjectIdentity({ cwd: process.cwd() });
   const ctx = {
     repoId: (flags['repo-id'] as string) ?? process.env.IEVOLVE_REPO_ID ?? detected.repoId,
