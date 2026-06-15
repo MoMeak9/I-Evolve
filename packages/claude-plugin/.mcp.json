@@ -1,0 +1,16 @@
+{
+  "i-evolve": {
+    "command": "pnpm",
+    "args": [
+      "-C",
+      "${IEVOLVE_HOME}",
+      "exec",
+      "tsx",
+      "apps/cli/src/index.ts",
+      "mcp",
+      "start",
+      "--stdio"
+    ],
+    "env": {}
+  }
+}

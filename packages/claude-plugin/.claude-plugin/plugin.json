@@ -4,5 +4,8 @@
   "version": "0.3.1",
   "author": {
     "name": "minntaki"
-  }
+  },
+  "homepage": "https://github.com/MoMeak9/I-Evolve",
+  "repository": "https://github.com/MoMeak9/I-Evolve",
+  "license": "MIT"
 }

@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import {
   buildCodexMcpConfigBlock,
+  buildClaudeMcpServers,
   installClaudeCodePlugin,
+  setupClaudeSettings,
   setupCodexConfig,
 } from '../apps/cli/src/commands/setup.js';
 
@@ -58,8 +60,42 @@ describe('setup command helpers', () => {
 
       expect(existsSync(join(dir, 'i-evolve', '.claude-plugin', 'plugin.json'))).toBe(true);
       expect(existsSync(join(dir, 'i-evolve', 'hooks', 'hooks.json'))).toBe(true);
+      expect(existsSync(join(dir, 'i-evolve', '.mcp.json'))).toBe(true);
       expect(existsSync(join(dir, 'i-evolve', 'skills', 'onboarding', 'SKILL.md'))).toBe(true);
       expect(existsSync(join(dir, 'i-evolve', 'skills', 'remember', 'SKILL.md'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('builds a Claude Code MCP server entry pointing at the checkout', () => {
+    const servers = buildClaudeMcpServers('/repo/I-Evolve') as Record<string, { command: string; args: string[] }>;
+    expect(servers['i-evolve'].command).toBe('pnpm');
+    expect(servers['i-evolve'].args).toContain('/repo/I-Evolve');
+    expect(servers['i-evolve'].args).toContain('--stdio');
+  });
+
+  it('registers plugin in settings.json while preserving existing keys (incl. secrets)', () => {
+    const dir = tempDir('ie-setup-settings');
+    const settingsPath = join(dir, 'settings.json');
+    mkdirSync(dir, { recursive: true });
+    // Pre-existing settings with a secret and an unrelated plugin.
+    writeFileSync(settingsPath, JSON.stringify({
+      env: { SECRET_TOKEN: 'keep-me' },
+      enabledPlugins: { 'other@market': true },
+    }, null, 2), 'utf-8');
+
+    try {
+      setupClaudeSettings({ settingsPath, projectRoot: '/repo/I-Evolve' });
+      const s = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+      // Existing keys preserved.
+      expect(s.env.SECRET_TOKEN).toBe('keep-me');
+      expect(s.enabledPlugins['other@market']).toBe(true);
+      // New registration applied.
+      expect(s.env.IEVOLVE_HOME).toBe('/repo/I-Evolve');
+      expect(s.enabledPlugins['i-evolve@i-evolve']).toBe(true);
+      expect(s.extraKnownMarketplaces['i-evolve'].source.source).toBe('git');
+      expect(s.mcpServers['i-evolve'].command).toBe('pnpm');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

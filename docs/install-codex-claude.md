@@ -99,19 +99,29 @@ English: Install the Claude Code plugin:
 pnpm tsx apps/cli/src/index.ts setup claude-code
 ```
 
-中文：该命令会把 plugin bundle 复制到：
+中文：该命令会：1) 把 plugin bundle 复制到 `~/.claude/plugins/i-evolve`；2) 在 `~/.claude/settings.json` 中注册 MCP server、启用 plugin、并写入 `IEVOLVE_HOME`（读-合并-写，保留已有配置与密钥）。
 
-English: This copies the plugin bundle to:
+English: This command 1) copies the plugin bundle to `~/.claude/plugins/i-evolve`, and 2) registers the MCP server, enables the plugin, and writes `IEVOLVE_HOME` in `~/.claude/settings.json` (read-merge-write; existing keys and secrets are preserved).
 
 ```text
 ~/.claude/plugins/i-evolve
 ```
+
+中文：写入 `~/.claude/settings.json` 的内容：
+
+English: Written into `~/.claude/settings.json`:
+
+- `env.IEVOLVE_HOME = <项目根 / project root>`（供 plugin 的 `${IEVOLVE_HOME}` 解析 / resolves the plugin's `${IEVOLVE_HOME}`）
+- `enabledPlugins["i-evolve@i-evolve"] = true`
+- `extraKnownMarketplaces["i-evolve"]`（指向 GitHub 源 / points at the GitHub source）
+- `mcpServers["i-evolve"]`（直接可用的 MCP server 兜底 / direct MCP server fallback）
 
 中文：安装内容：
 
 English: Installed plugin contents:
 
 - `.claude-plugin/plugin.json`
+- `.mcp.json`
 - `hooks/hooks.json`
 - `skills/onboarding/SKILL.md`
 - `skills/init/SKILL.md`
@@ -120,9 +130,18 @@ English: Installed plugin contents:
 - `skills/audit/SKILL.md`
 - `skills/explain-memory/SKILL.md`
 
-中文：安装后重启 Claude Code，使 hooks 和 skills 生效。
+中文：安装后重启 Claude Code，使 MCP tools、hooks 和 skills 生效。
 
-English: Restart Claude Code after setup so hooks and skills are loaded.
+English: Restart Claude Code after setup so MCP tools, hooks, and skills are loaded.
+
+中文：作为 marketplace 安装（可选）：
+
+English: Install as a marketplace (optional):
+
+```bash
+claude plugin marketplace add https://github.com/MoMeak9/I-Evolve.git
+claude plugin install i-evolve@i-evolve
+```
 
 ## 项目身份 / Project Identity
 

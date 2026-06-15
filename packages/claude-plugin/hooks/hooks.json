@@ -6,7 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "i-evolve inject --format markdown"
+            "command": "pnpm",
+            "args": ["-C", "${IEVOLVE_HOME}", "exec", "tsx", "apps/cli/src/index.ts", "inject", "--format", "markdown"]
           }
         ]
       }
@@ -17,7 +18,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "i-evolve observe --phase post_tool_use --source claude-code"
+            "command": "pnpm",
+            "args": ["-C", "${IEVOLVE_HOME}", "exec", "tsx", "apps/cli/src/index.ts", "observe", "--phase", "post_tool_use", "--source", "claude-code"]
           }
         ]
       }
@@ -28,7 +30,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "i-evolve session finalize --auto-evolve"
+            "command": "pnpm",
+            "args": ["-C", "${IEVOLVE_HOME}", "exec", "tsx", "apps/cli/src/index.ts", "session", "finalize", "--auto-evolve"]
           }
         ]
       }

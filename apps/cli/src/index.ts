@@ -39,6 +39,7 @@ const { positionals, values } = parseArgs({
     'project-root': { type: 'string' },
     'codex-config': { type: 'string' },
     'claude-plugin-dir': { type: 'string' },
+    'claude-settings': { type: 'string' },
     yes: { type: 'boolean', short: 'y' },
     'non-interactive': { type: 'boolean' },
     remote: { type: 'string' },

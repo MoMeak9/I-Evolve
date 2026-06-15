@@ -26,20 +26,25 @@ describe('Claude plugin structure', () => {
 
   it('SessionStart hook calls i-evolve inject', () => {
     const json = JSON.parse(readFileSync(join(pluginDir, 'hooks', 'hooks.json'), 'utf-8'));
-    const cmd = json.hooks.SessionStart[0].hooks[0].command;
-    expect(cmd).toContain('i-evolve inject');
+    const hook = json.hooks.SessionStart[0].hooks[0];
+    expect(hook.command).toBe('pnpm');
+    expect([hook.command, ...hook.args].join(' ')).toContain('inject');
+    expect(hook.args).toContain('${IEVOLVE_HOME}');
   });
 
   it('PostToolUse hook calls i-evolve observe', () => {
     const json = JSON.parse(readFileSync(join(pluginDir, 'hooks', 'hooks.json'), 'utf-8'));
-    const cmd = json.hooks.PostToolUse[0].hooks[0].command;
-    expect(cmd).toContain('i-evolve observe');
+    const hook = json.hooks.PostToolUse[0].hooks[0];
+    expect(hook.command).toBe('pnpm');
+    expect([hook.command, ...hook.args].join(' ')).toContain('observe');
+    expect(hook.args).toContain('${IEVOLVE_HOME}');
   });
 
   it('Stop hook calls i-evolve session finalize', () => {
     const json = JSON.parse(readFileSync(join(pluginDir, 'hooks', 'hooks.json'), 'utf-8'));
-    const cmd = json.hooks.Stop[0].hooks[0].command;
-    expect(cmd).toContain('session finalize');
+    const hook = json.hooks.Stop[0].hooks[0];
+    expect(hook.command).toBe('pnpm');
+    expect([hook.command, ...hook.args].join(' ')).toContain('session finalize');
   });
 
   it('has all five skills', () => {

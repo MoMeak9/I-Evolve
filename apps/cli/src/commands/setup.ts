@@ -13,6 +13,16 @@ export interface InstallClaudeCodePluginOptions {
   targetDir: string;
 }
 
+export interface SetupClaudeSettingsOptions {
+  settingsPath: string;
+  projectRoot: string;
+  marketplaceUrl?: string;
+}
+
+const CLAUDE_MARKETPLACE = 'i-evolve';
+const CLAUDE_PLUGIN_KEY = 'i-evolve@i-evolve';
+const DEFAULT_MARKETPLACE_URL = 'https://github.com/MoMeak9/I-Evolve.git';
+
 export async function handleSetupCommand(
   subcommand: string | undefined,
   flags: Record<string, unknown>,
@@ -35,11 +45,16 @@ export async function handleSetupCommand(
   if (target === 'claude-code' || target === 'all') {
     const sourceDir = join(projectRoot, 'packages', 'claude-plugin');
     const targetDir = resolveHome((flags['claude-plugin-dir'] as string | undefined) ?? '~/.claude/plugins/i-evolve');
+    const settingsPath = resolveHome((flags['claude-settings'] as string | undefined) ?? '~/.claude/settings.json');
     if (dryRun) {
       console.log(`[dry-run] Would install Claude Code plugin: ${sourceDir} -> ${targetDir}`);
+      console.log(`[dry-run] Would register plugin + MCP server in: ${settingsPath}`);
+      console.log(`[dry-run]   env.IEVOLVE_HOME=${projectRoot}, enabledPlugins["${CLAUDE_PLUGIN_KEY}"]=true`);
     } else {
       installClaudeCodePlugin({ sourceDir, targetDir });
+      setupClaudeSettings({ settingsPath, projectRoot });
       console.log(`Claude Code plugin installed: ${targetDir}`);
+      console.log(`Claude Code settings updated: ${settingsPath}`);
     }
   }
 
@@ -66,8 +81,9 @@ export function buildCodexMcpConfigBlock(projectRoot: string): string {
     '[mcp_servers.i-evolve]',
     'command = "pnpm"',
     'args = [',
-    '  "--dir",',
+    '  "-C",',
     `  ${escapedRoot},`,
+    '  "exec",',
     '  "tsx",',
     '  "apps/cli/src/index.ts",',
     '  "mcp",',
@@ -91,6 +107,53 @@ export function installClaudeCodePlugin(options: InstallClaudeCodePluginOptions)
   if (!existsSync(options.sourceDir)) throw new Error(`Claude plugin source not found: ${options.sourceDir}`);
   if (!existsSync(dirname(options.targetDir))) mkdirSync(dirname(options.targetDir), { recursive: true });
   cpSync(options.sourceDir, options.targetDir, { recursive: true, force: true });
+}
+
+/** The MCP server entry the plugin exposes to Claude Code, keyed by server name. */
+export function buildClaudeMcpServers(projectRoot: string): Record<string, unknown> {
+  return {
+    'i-evolve': {
+      command: 'pnpm',
+      args: ['-C', projectRoot, 'exec', 'tsx', 'apps/cli/src/index.ts', 'mcp', 'start', '--stdio'],
+    },
+  };
+}
+
+/**
+ * Register I-Evolve with Claude Code by merging into ~/.claude/settings.json:
+ *   - env.IEVOLVE_HOME so the plugin's ${IEVOLVE_HOME} resolves to the checkout
+ *   - enabledPlugins["i-evolve@i-evolve"] = true
+ *   - extraKnownMarketplaces["i-evolve"] pointing at the git source
+ *   - mcpServers["i-evolve"] as a direct fallback so tools work even before
+ *     the marketplace plugin is fetched
+ * Existing keys (including secrets in env) are preserved by read-merge-write.
+ */
+export function setupClaudeSettings(options: SetupClaudeSettingsOptions): void {
+  const { settingsPath, projectRoot } = options;
+  const url = options.marketplaceUrl ?? DEFAULT_MARKETPLACE_URL;
+  if (!existsSync(dirname(settingsPath))) mkdirSync(dirname(settingsPath), { recursive: true });
+
+  const settings: Record<string, unknown> = existsSync(settingsPath)
+    ? (JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>)
+    : {};
+
+  const env = (settings.env as Record<string, unknown>) ?? {};
+  env.IEVOLVE_HOME = projectRoot;
+  settings.env = env;
+
+  const enabled = (settings.enabledPlugins as Record<string, unknown>) ?? {};
+  enabled[CLAUDE_PLUGIN_KEY] = true;
+  settings.enabledPlugins = enabled;
+
+  const markets = (settings.extraKnownMarketplaces as Record<string, unknown>) ?? {};
+  markets[CLAUDE_MARKETPLACE] = { source: { source: 'git', url } };
+  settings.extraKnownMarketplaces = markets;
+
+  const mcp = (settings.mcpServers as Record<string, unknown>) ?? {};
+  Object.assign(mcp, buildClaudeMcpServers(projectRoot));
+  settings.mcpServers = mcp;
+
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
 }
 
 function replaceTomlTable(content: string, table: string, block: string): string {

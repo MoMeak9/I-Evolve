@@ -1,0 +1,29 @@
+{
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
+  "name": "i-evolve",
+  "owner": {
+    "name": "minntaki"
+  },
+  "description": "I-Evolve: cross-repo memory and self-evolution for coding agents.",
+  "plugins": [
+    {
+      "name": "i-evolve",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/MoMeak9/I-Evolve.git",
+        "path": "packages/claude-plugin",
+        "ref": "main"
+      },
+      "description": "Daemon-backed shared memory: recall, remember, auto-inject, and session evolution for Claude Code.",
+      "version": "0.3.1",
+      "author": {
+        "name": "minntaki"
+      },
+      "homepage": "https://github.com/MoMeak9/I-Evolve",
+      "repository": "https://github.com/MoMeak9/I-Evolve",
+      "license": "MIT",
+      "category": "development",
+      "keywords": ["memory", "mcp", "evolution", "cross-repo"]
+    }
+  ]
+}
