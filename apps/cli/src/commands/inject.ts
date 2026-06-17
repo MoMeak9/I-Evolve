@@ -20,7 +20,11 @@ export async function handleInject(flags: Record<string, unknown>): Promise<void
   const { ensureDaemon } = await import('./ensure-daemon.js');
   await ensureDaemon();
 
-  const detected = detectProjectIdentity({ cwd: process.cwd() });
+  // Prefer the caller's real cwd (preserved by the launcher) over process.cwd(),
+  // which the `pnpm -C` launcher pins to IEVOLVE_HOME and would otherwise misdetect
+  // the repo as the I-Evolve checkout itself.
+  const invocationCwd = process.env.IEVOLVE_INVOCATION_CWD ?? process.cwd();
+  const detected = detectProjectIdentity({ cwd: invocationCwd });
   const ctx = {
     repoId: (flags['repo-id'] as string) ?? process.env.IEVOLVE_REPO_ID ?? detected.repoId,
     projectId: (flags['project-id'] as string) ?? process.env.IEVOLVE_PROJECT_ID ?? detected.projectId,
