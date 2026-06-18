@@ -22,6 +22,10 @@ describe('embedding vector utils', () => {
 
   it('defaults unknown profile names to lite', () => {
     expect(resolveProfile(undefined).profile).toBe('lite');
+    expect(resolveProfile('nonexistent').profile).toBe('lite');
+  });
+
+  it('exposes the default profile as bge-m3', () => {
     expect(PROFILES.default.modelId).toBe('BAAI/bge-m3');
   });
 });

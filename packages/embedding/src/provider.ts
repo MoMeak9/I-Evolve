@@ -29,11 +29,6 @@ export function resolveProfile(name: string | undefined): ProfileSpec {
   return PROFILES.lite;
 }
 
-/** 找 modelId 对应的 profile spec（用于前缀查表），找不到回退 lite。 */
-export function specForModelId(modelId: string): ProfileSpec {
-  return Object.values(PROFILES).find((p) => p.modelId === modelId) ?? PROFILES.lite;
-}
-
 export function l2Normalize(vec: Float32Array): Float32Array {
   let sum = 0;
   for (let i = 0; i < vec.length; i++) sum += vec[i] * vec[i];
