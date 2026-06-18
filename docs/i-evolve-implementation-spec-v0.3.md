@@ -1018,6 +1018,117 @@ export interface PolicyCheckResult {
 
 ---
 
+
+## 8A. 召回与向量化系统
+
+本章节补充 Memory 数据模型之后的召回运行时设计。核心结论：**i-evolve 不建设多人共享检索服务；Git 只同步 Markdown Memory，不同步 embedding、向量索引、BM25/FTS 索引或查询缓存。** 所有检索产物都是用户本地从 Git Memory Pack 与本地私有 Memory 反向构建出的派生缓存。
+
+### 8A.1 Local-first 架构
+
+```text
+Git / Local Markdown Memory
+→ 本地解析、切块、标准化
+→ 本地 embedding 模型向量化
+→ 本地 SQLite metadata / Vector / BM25 索引
+→ SessionStart 基线召回
+→ UserPromptSubmit 动态意图召回
+→ Top-K Context Injection
+```
+
+本地构建流程必须支持 `i-evolve init`、`i-evolve memory sync` 后自动触发 `i-evolve index rebuild`。重建时读取当前 Memory Pack lock/manifest，扫描 shared memory 与 local memory，解析 Markdown frontmatter，过滤非 active/approved 共享记忆，执行 memory-aware chunking，写入 SQLite metadata、FTS/BM25 与本地 vector index，并生成 `index_manifest.yaml`。
+
+### 8A.2 默认本地 Embedding 模型
+
+默认 embedding profile 使用本地模型，不依赖云端 embedding 服务：
+
+```yaml
+default_embedding_model:
+  provider: local
+  name: BAAI/bge-m3
+  runtime: FlagEmbedding
+  dimension: 1024
+  device: auto
+  precision: fp16_if_available
+  max_length:
+    document: 8192
+    query: 512
+```
+
+第一版同时保留轻量 profile：`intfloat/multilingual-e5-small` 作为 `lite`，`BAAI/bge-small-zh-v1.5` 作为 `chinese_lite`。模型安装命令为 `i-evolve model install default`，本地锁文件写入 `~/.i-evolve/models/<model_id>/model.lock.yaml`。
+
+### 8A.3 Memory-aware Chunking
+
+Memory 不能按普通 RAG 固定长度粗暴切块。每条 Memory 至少生成三类 chunk：
+
+| chunk 类型 | 用途 | 内容 |
+|---|---|---|
+| `header` | 精确过滤和快速召回 | memory_id、title、type、scope、tags、project_id、domain |
+| `semantic` | 语义检索 | 正文摘要、核心事实、适用范围、不适用范围 |
+| `operational` | 执行时注入 | instinct 的 trigger/action/reason 或 workflow_rule 的 condition/procedure/output |
+
+`chunk_id` 规则为：
+
+```text
+sha256(memory_id + memory_version + chunk_type + content_hash)
+```
+
+该规则保证内容未变化时不重复向量化，Memory 更新后 chunk 自动换代，并且检索结果可以追踪到来源 Memory。
+
+### 8A.4 双阶段召回
+
+召回分为两个 Hook 阶段：
+
+1. `SessionStart Recall`：建立会话基线，注入 memory_0、当前项目 profile、approved/active instincts、项目事实、用户长期偏好和最近 active decisions。默认预算为 16 条 / 1800 tokens。
+2. `UserPromptSubmit Recall`：在用户提交 prompt 后、Agent 处理前触发，先进行意图推测，再召回 prompt-specific context。默认预算为 10 条 / 1200 tokens。
+
+`UserPromptSubmit` 的意图 schema 包含 `task_type`、`domain`、`action_level`、`expected_output`、`risk_flags`、`memory_needs` 与 `search_queries`。MVP 使用规则分类、关键词、当前 cwd/repo/project_id 与可选本地小模型组合实现。
+
+### 8A.5 Hybrid Recall 与注入
+
+检索不得只依赖向量相似度。默认链路为：
+
+```text
+Metadata Filter
++ Dense Vector Search
++ Lexical Search / FTS
++ Memory Type Boost
++ Recency / Confidence Boost
++ Intent Boost
++ Dedup
++ Token Budget Packing
+```
+
+默认打分公式：
+
+```text
+score = 0.45*dense + 0.20*lexical + 0.15*intent + 0.10*confidence + 0.05*recency + 0.05*scope - penalty
+```
+
+默认 metadata filter 仅包含 active/approved、当前 agent 或 `*`、当前 profile/default、local/team/shared、未过期且在有效期内的 Memory；默认排除跨项目 Memory。注入格式固定为 `# i-evolve Baseline Context` 与 `# i-evolve Prompt-Specific Context`，并在 debug 模式输出候选数量、命中来源、最终选择和丢弃原因。
+
+### 8A.6 CLI 与诊断命令
+
+召回迭代新增 CLI 面：
+
+```bash
+i-evolve model install default
+i-evolve model list
+i-evolve model status
+i-evolve model switch BAAI/bge-m3
+i-evolve index rebuild
+i-evolve index update
+i-evolve index doctor
+i-evolve recall --phase session_start
+i-evolve recall --phase user_prompt_submit --query "帮我 review SSR 迁移后的水合问题"
+i-evolve intent infer --prompt "帮我 review SSR 迁移后的水合问题"
+i-evolve retrieval eval
+i-evolve retrieval trace <query_id>
+```
+
+验收顺序按 MVP-R0 到 MVP-R6 推进：本地模型安装、全量索引构建、SessionStart 基线召回、UserPromptSubmit 动态召回、Hybrid Ranking、增量索引/版本切换、召回评估。
+
+---
+
 ## 9. Repository 接口设计
 
 ### 9.1 MemoryRepository

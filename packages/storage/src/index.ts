@@ -9,3 +9,6 @@ export { retrieveContextDebug } from './context-retrieval.js';
 export type { RetrievalContext, RetrievedContext, TopKLimits, ConflictReport, RetrievalDebugResult, RetrievalDebugStats } from './context-retrieval.js';
 export { bindProjectIdentity, detectProjectIdentity, normalizeGitRemoteUrl, readProjectProfile } from './project-identity.js';
 export type { BindProjectIdentityInput, ProjectIdentity, ProjectProfileDocument, DetectProjectIdentityInput } from './project-identity.js';
+
+export { inferPromptIntent, chunkMemory, recallMarkdown } from './retrieval-runtime.js';
+export type { PromptIntent, MemoryChunk, RecallPhase } from './retrieval-runtime.js';

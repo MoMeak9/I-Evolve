@@ -44,6 +44,7 @@ const { positionals, values } = parseArgs({
     'non-interactive': { type: 'boolean' },
     remote: { type: 'string' },
     'skip-remote': { type: 'boolean' },
+    prompt: { type: 'string' },
   },
 });
 
@@ -69,6 +70,10 @@ Commands:
   setup codex                  Configure Codex MCP server
   setup claude-code            Install Claude Code plugin
   doctor --bootstrap           Check system health
+  model install default        Install default local embedding model
+  index rebuild|doctor         Rebuild or inspect the local retrieval index
+  recall --phase <phase>       Print SessionStart/UserPromptSubmit context
+  intent infer --prompt <txt>  Infer prompt intent
   repair stale-lock            Remove stale daemon lock`);
   process.exit(0);
 }
@@ -94,6 +99,15 @@ if (command === 'daemon') {
 } else if (command === 'identity') {
   const { handleIdentityCommand } = await import('./commands/identity.js');
   await handleIdentityCommand(subcommand, values);
+} else if (command === 'model') {
+  const { handleModelCommand } = await import('./commands/retrieval-runtime.js');
+  await handleModelCommand(subcommand, rest);
+} else if (command === 'intent') {
+  const { handleIntentCommand } = await import('./commands/retrieval-runtime.js');
+  await handleIntentCommand(subcommand, values);
+} else if (command === 'recall') {
+  const { handleRecallCommand } = await import('./commands/retrieval-runtime.js');
+  await handleRecallCommand(values);
 } else if (command === 'retrieval') {
   if (subcommand === 'explain') {
     const memory = values.memory as string | undefined;
@@ -156,8 +170,12 @@ if (command === 'daemon') {
   const { handleMemoryCommand } = await import('./commands/memory.js');
   await handleMemoryCommand(subcommand, rest, values);
 } else if (command === 'index') {
-  const { handleIndexCommand } = await import('./commands/memory.js');
-  await handleIndexCommand(subcommand);
+  const { handleIndexRuntimeCommand } = await import('./commands/retrieval-runtime.js');
+  const handled = await handleIndexRuntimeCommand(subcommand);
+  if (!handled) {
+    const { handleIndexCommand } = await import('./commands/memory.js');
+    await handleIndexCommand(subcommand);
+  }
 } else if (command === 'evolve') {
   const { handleEvolveCommand } = await import('./commands/evolve.js');
   await handleEvolveCommand(subcommand, values);
