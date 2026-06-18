@@ -127,14 +127,24 @@ describe('validateCandidates', () => {
     const raw = [
       { title: 'ok', type: 'repo_fact', proposedScope: 'repo', content: 'c', confidence: 0.8, sourceRefs: [], evidence: [], riskFlags: [] },
       { title: '', type: 'repo_fact', proposedScope: 'repo', content: 'c', confidence: 0.8 },
+      { title: 'no content', type: 'repo_fact', proposedScope: 'repo', content: '', confidence: 0.5 },
       { title: 'bad type', type: 'nope', proposedScope: 'repo', content: 'c', confidence: 0.8 },
       { title: 'bad scope', type: 'decision', proposedScope: 'galaxy', content: 'c', confidence: 0.8 },
       { title: 'bad conf', type: 'decision', proposedScope: 'repo', content: 'c', confidence: 2 },
+      { title: 'nan conf', type: 'decision', proposedScope: 'repo', content: 'c', confidence: NaN },
     ];
     const { valid, dropped } = validateCandidates(raw);
     expect(valid.map((c) => c.title)).toEqual(['ok']);
-    expect(dropped).toHaveLength(4);
-    expect(dropped[0].reason).toMatch(/title|content|type|scope|confidence/);
+    expect(dropped).toHaveLength(6);
+    expect(dropped.map((d) => d.reason)).toEqual([
+      'empty title',
+      'empty content',
+      'invalid type: nope',
+      'invalid proposedScope: galaxy',
+      'invalid confidence: 2',
+      'invalid confidence: NaN',
+    ]);
+    expect(dropped[0].title).toBe('(no title)');
   });
 });
 

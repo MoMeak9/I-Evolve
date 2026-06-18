@@ -149,7 +149,7 @@ export function validateCandidates(raw: unknown[]): { valid: CandidateMemory[]; 
       : !c.content || typeof c.content !== 'string' ? 'empty content'
       : !TYPES.includes(c.type as MemoryType) ? `invalid type: ${String(c.type)}`
       : !SCOPES.includes(c.proposedScope as MemoryScope) ? `invalid proposedScope: ${String(c.proposedScope)}`
-      : typeof c.confidence !== 'number' || c.confidence < 0 || c.confidence > 1 ? `invalid confidence: ${String(c.confidence)}`
+      : typeof c.confidence !== 'number' || !Number.isFinite(c.confidence) || c.confidence < 0 || c.confidence > 1 ? `invalid confidence: ${String(c.confidence)}`
       : '';
     if (reason) {
       dropped.push({ title: title || '(no title)', reason });
