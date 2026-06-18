@@ -57,6 +57,20 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
 CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status);
 CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
 CREATE INDEX IF NOT EXISTS idx_memories_repo ON memories(repo_id);
+
+CREATE TABLE IF NOT EXISTS chunk_vectors (
+  chunk_id TEXT NOT NULL,
+  memory_id TEXT NOT NULL,
+  chunk_type TEXT NOT NULL,
+  model_id TEXT NOT NULL,
+  dimension INTEGER NOT NULL,
+  content_hash TEXT NOT NULL,
+  vector BLOB NOT NULL,
+  indexed_at TEXT NOT NULL,
+  PRIMARY KEY (chunk_id, model_id)
+);
+CREATE INDEX IF NOT EXISTS idx_vec_memory ON chunk_vectors(memory_id);
+CREATE INDEX IF NOT EXISTS idx_vec_model ON chunk_vectors(model_id);
 `;
 
 export class SqliteIndex {
@@ -104,6 +118,7 @@ export class SqliteIndex {
       this.db.prepare('DELETE FROM memory_fts WHERE memory_id = ?').run(memoryId);
       this.db.prepare('DELETE FROM memory_tags WHERE memory_id = ?').run(memoryId);
       this.db.prepare('DELETE FROM memories WHERE id = ?').run(memoryId);
+      this.db.prepare('DELETE FROM chunk_vectors WHERE memory_id = ?').run(memoryId);
     });
     tx();
   }
@@ -141,8 +156,65 @@ export class SqliteIndex {
     return this.db.prepare(sql).all(...params) as Array<{ memory_id: string; rank: number }>;
   }
 
+  upsertVectors(rows: Array<{
+    chunkId: string; memoryId: string; chunkType: string; modelId: string;
+    dimension: number; contentHash: string; vector: Float32Array; indexedAt: string;
+  }>): void {
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO chunk_vectors
+      (chunk_id, memory_id, chunk_type, model_id, dimension, content_hash, vector, indexed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const tx = this.db.transaction(() => {
+      for (const r of rows) {
+        const buf = Buffer.from(r.vector.buffer, r.vector.byteOffset, r.vector.byteLength);
+        stmt.run(r.chunkId, r.memoryId, r.chunkType, r.modelId, r.dimension, r.contentHash, buf, r.indexedAt);
+      }
+    });
+    tx();
+  }
+
+  /** 删除该 memory 在所有模型下、chunk_id 不在 keepChunkIds 中的向量。 */
+  pruneVectors(memoryId: string, keepChunkIds: string[]): void {
+    const rows = this.db.prepare('SELECT chunk_id FROM chunk_vectors WHERE memory_id = ?').all(memoryId) as Array<{ chunk_id: string }>;
+    const keep = new Set(keepChunkIds);
+    const del = this.db.prepare('DELETE FROM chunk_vectors WHERE memory_id = ? AND chunk_id = ?');
+    const tx = this.db.transaction(() => {
+      for (const r of rows) if (!keep.has(r.chunk_id)) del.run(memoryId, r.chunk_id);
+    });
+    tx();
+  }
+
+  /** 返回某 chunk 在某模型下已存的 content_hash（用于增量跳过），无则 null。 */
+  getVectorHash(chunkId: string, modelId: string): string | null {
+    const row = this.db.prepare('SELECT content_hash FROM chunk_vectors WHERE chunk_id = ? AND model_id = ?')
+      .get(chunkId, modelId) as { content_hash: string } | undefined;
+    return row?.content_hash ?? null;
+  }
+
+  /** 取该模型全部向量，JS 算点积（向量已 L2 归一化 = 余弦），返回 topN。 */
+  queryNearest(queryVec: Float32Array, modelId: string, topN: number): Array<{ memory_id: string; chunk_id: string; score: number }> {
+    const rows = this.db.prepare('SELECT chunk_id, memory_id, vector FROM chunk_vectors WHERE model_id = ?')
+      .all(modelId) as Array<{ chunk_id: string; memory_id: string; vector: Buffer }>;
+    const scored = rows.map((r) => {
+      const copy = Buffer.from(r.vector);
+      const v = new Float32Array(copy.buffer, copy.byteOffset, copy.byteLength / 4);
+      let dot = 0;
+      const n = Math.min(v.length, queryVec.length);
+      for (let i = 0; i < n; i++) dot += v[i] * queryVec[i];
+      return { memory_id: r.memory_id, chunk_id: r.chunk_id, score: dot };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, topN);
+  }
+
+  vectorStats(modelId: string): { vectors: number } {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM chunk_vectors WHERE model_id = ?').get(modelId) as { n: number };
+    return { vectors: row.n };
+  }
+
   clear(): void {
-    this.db.exec('DELETE FROM memory_fts; DELETE FROM memory_tags; DELETE FROM memories;');
+    this.db.exec('DELETE FROM memory_fts; DELETE FROM memory_tags; DELETE FROM memories; DELETE FROM chunk_vectors;');
   }
 
   close(): void {

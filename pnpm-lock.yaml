@@ -243,6 +243,9 @@ importers:
       '@i-evolve/core':
         specifier: workspace:*
         version: link:../core
+      '@i-evolve/embedding':
+        specifier: workspace:*
+        version: link:../embedding
       '@i-evolve/repository':
         specifier: workspace:*
         version: link:../repository
