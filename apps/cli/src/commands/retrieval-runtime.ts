@@ -79,7 +79,7 @@ export async function handleRecallCommand(flags: Record<string, unknown>): Promi
   if (query) {
     if (await provider.isReady()) {
       const [qv] = await provider.embed([query], 'query');
-      deps = { index: (repo as any).index, modelId: provider.id, queryVector: qv };
+      deps = { index: repo.getIndex(), modelId: provider.id, queryVector: qv };
     } else {
       console.log(`# Note: embedding model not installed. Run: i-evolve model install ${profile}`);
       console.log('# Falling back to lexical (FTS) retrieval only.\n');
@@ -101,7 +101,7 @@ export async function handleIndexRuntimeCommand(subcommand: string | undefined):
     const modelId = resolveProfile(mgr.activeProfile()).modelId;
     const repo = getRepo();
     const memories = repo.list();
-    const stats = (repo as any).index.vectorStats(modelId);
+    const stats = repo.getIndex().vectorStats(modelId);
     repo.close();
     console.log('Index status: healthy');
     console.log(`Embedding model: ${modelId}`);
@@ -136,7 +136,7 @@ async function vectorizeAll(rebuild: boolean): Promise<void> {
   }
   const repo = getRepo();
   if (rebuild) repo.rebuildIndex();
-  const index = (repo as any).index;
+  const index = repo.getIndex();
   const memories = repo.list({ status: 'active' });
   const modelId = provider.id;
   const now = new Date().toISOString();
