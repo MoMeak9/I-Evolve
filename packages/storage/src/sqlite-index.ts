@@ -1,6 +1,25 @@
 import Database from 'better-sqlite3';
 import type { MemoryItem } from '@i-evolve/core';
 
+/**
+ * Convert an arbitrary user string into a safe FTS5 MATCH expression.
+ *
+ * The raw query is otherwise interpreted as FTS5 query syntax, so bare
+ * punctuation (".", "-", ":", quotes, an empty string, etc.) raises
+ * `fts5: syntax error`. We tokenize on non-word characters and emit each
+ * token as a double-quoted FTS5 string literal (embedded quotes doubled),
+ * OR-ing them together. Returns '' when there is nothing searchable, so the
+ * caller can skip the query instead of throwing.
+ */
+function toFtsMatchQuery(query: string): string {
+  if (!query) return '';
+  const tokens = query
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((t) => t.length > 0)
+    .map((t) => `"${t.replace(/"/g, '""')}"`);
+  return tokens.join(' OR ');
+}
+
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS memories (
   id TEXT PRIMARY KEY,
@@ -116,8 +135,10 @@ export class SqliteIndex {
   }
 
   search(query: string, options?: { status?: string }): Array<{ memory_id: string; rank: number }> {
+    const match = toFtsMatchQuery(query);
+    if (!match) return [];
     let sql = `SELECT f.memory_id, rank FROM memory_fts f JOIN memories m ON m.id = f.memory_id WHERE memory_fts MATCH ?`;
-    const params: unknown[] = [query];
+    const params: unknown[] = [match];
     if (options?.status) { sql += ' AND m.status = ?'; params.push(options.status); }
     sql += ' ORDER BY rank LIMIT 50';
     return this.db.prepare(sql).all(...params) as Array<{ memory_id: string; rank: number }>;

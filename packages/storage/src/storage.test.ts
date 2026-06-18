@@ -60,6 +60,31 @@ describe('MarkdownMemoryRepository', () => {
     expect(results[0].memory.id).toBe('project.test.sample-memory');
   });
 
+  it('search with empty/whitespace query returns [] instead of throwing', () => {
+    repo.create(makeInput());
+    expect(() => repo.search('')).not.toThrow();
+    expect(repo.search('')).toEqual([]);
+    expect(repo.search('   ')).toEqual([]);
+  });
+
+  it('search tolerates FTS5 special characters (dot, dash, colon, quotes)', () => {
+    repo.create(makeInput());
+    // These all raised `fts5: syntax error` before sanitization.
+    expect(() => repo.search('eva3.0')).not.toThrow();
+    expect(() => repo.search('a-b:c')).not.toThrow();
+    expect(() => repo.search('"unterminated')).not.toThrow();
+    expect(() => repo.search('.')).not.toThrow();
+    expect(repo.search('.')).toEqual([]);
+  });
+
+  it('search still matches when query is wrapped in punctuation', () => {
+    repo.create(makeInput());
+    // "test" lives in content/tags; surrounding punctuation must not break it.
+    const results = repo.search('(test).');
+    expect(results.length).toBe(1);
+    expect(results[0].memory.id).toBe('project.test.sample-memory');
+  });
+
   it('update with correct revision succeeds', () => {
     const memory = repo.create(makeInput());
     const updated = repo.update(memory.id, { title: 'Updated Title' }, {
