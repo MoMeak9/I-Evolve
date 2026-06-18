@@ -199,6 +199,33 @@ export function detectIntraBatchCollisions(
   return { kept, skipped };
 }
 
+export interface KnownCandidate { id: string; title: string }
+
+/**
+ * 跨运行判重 (§6.1)：用与批内判重相同的 idForCandidate 算 id，把候选分成
+ * fresh（id 不在 store）和 alreadyKnown（id 已在 store）。语义：同 id 且已存在 →
+ * 跳过、不重写——所以同 id 下的内容变更不会经此路径更新，这是 spec §6.1「判重跳过」
+ * 的既定行为。id 经 idForCandidate 对非 ASCII 安全,中文标题能正确判重(不会像
+ * judge 的 slug 判重那样空 slug 误匹配所有 id)。
+ */
+export function partitionByExistingIds(
+  cands: CandidateMemory[],
+  existingIds: Set<string>,
+  idFn: (c: CandidateMemory, scope: MemoryScope) => string,
+): { fresh: CandidateMemory[]; alreadyKnown: KnownCandidate[] } {
+  const fresh: CandidateMemory[] = [];
+  const alreadyKnown: KnownCandidate[] = [];
+  for (const c of cands) {
+    const id = idFn(c, c.proposedScope);
+    if (existingIds.has(id)) {
+      alreadyKnown.push({ id, title: c.title });
+    } else {
+      fresh.push(c);
+    }
+  }
+  return { fresh, alreadyKnown };
+}
+
 /** 照搬 inject-pr-candidates.ts：非 ASCII 标题 slug 为空时回退 <sha>-<titlehash>。 */
 export function idForCandidate(c: CandidateMemory, scope: MemoryScope): string {
   const ns = (c.repoId ?? 'unknown').replace(/\//g, '-');
@@ -383,17 +410,26 @@ async function runInject(argv: string[]): Promise<void> {
   console.log(`candidates:  ${raw.length} raw → ${valid.length} valid → ${kept.length} after intra-batch dedup\n`);
 
   const repo = getRepo();
-  const existingIds = repo.list({ scope: 'repo', repoId }).map((m) => m.id);
+  const existingIds = new Set(repo.list({ scope: 'repo', repoId }).map((m) => m.id));
+
+  // 归一化 repoId：pipeline 的 extractor 会用 summary.repoId 兜底 (c.repoId ?? summary.repoId)，
+  // store 里的 id 命名空间由此而来。我们的预过滤必须用同一 repoId 算 id 才能对齐，否则
+  // 候选缺 repoId 时会落到 'unknown' 命名空间、永远匹配不上。
+  const normalized = kept.map((c) => ({ ...c, repoId: c.repoId ?? repoId }));
+
+  // 跨运行判重 (§6.1)：自己用 idForCandidate 算 id 过滤，绝不依赖 judge 的
+  // duplicate_check——后者按 slug(title) 判重，中文标题 slug 为空会误匹配所有 id。
+  const { fresh, alreadyKnown } = partitionByExistingIds(normalized, existingIds, idForCandidate);
+  for (const k of alreadyKnown) console.warn(`  [SKIP-EXISTING] ${k.title} — id ${k.id} already in store`);
 
   const now = new Date().toISOString();
   const expiresAt = new Date(Date.parse(now) + TTL_DAYS * 24 * 3600 * 1000).toISOString();
 
   const provider = new MockAiProvider();
-  provider.setDefault(JSON.stringify(kept));
+  provider.setDefault(JSON.stringify(fresh));
 
   const pipeline = new EvolutionPipeline({
     provider,
-    policyContext: { existingIds },
     idForCandidate,
     writeMemory: (input: CreateMemoryFromDecisionInput) =>
       repo.create({
@@ -438,7 +474,7 @@ async function runInject(argv: string[]): Promise<void> {
 
   console.log(
     `\nSummary: 写入 ${args.dryRun ? 0 : written} / 跳过(批内重复) ${skipped.length} / ` +
-    `剔除(校验失败) ${dropped.length} / judge拒绝 ${rejected}`,
+    `跳过(已存在) ${alreadyKnown.length} / 剔除(校验失败) ${dropped.length} / judge拒绝 ${rejected}`,
   );
   if (args.dryRun) console.log('Dry-run: nothing written.');
   else console.log(`Wrote to ${paths.shared.memory}. Not committed, not pushed.`);

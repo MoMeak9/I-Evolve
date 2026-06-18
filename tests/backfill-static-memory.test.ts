@@ -9,6 +9,7 @@ import { probeFileHeads } from '../scripts/backfill-static-memory.ts';
 import { buildContextPack } from '../scripts/backfill-static-memory.ts';
 import { validateCandidates, detectIntraBatchCollisions } from '../scripts/backfill-static-memory.ts';
 import { idForCandidate, mergeStaticSourceRefs } from '../scripts/backfill-static-memory.ts';
+import { partitionByExistingIds } from '../scripts/backfill-static-memory.ts';
 
 function tmpGitRepo(): string {
   const dir = join('/tmp', `ie-static-${randomBytes(4).toString('hex')}`);
@@ -183,5 +184,32 @@ describe('mergeStaticSourceRefs', () => {
     expect(refs).toContain('README.md#Architecture');
     expect(refs).toContain('org/repo@static:1e14647');
     expect(mergeStaticSourceRefs(['org/repo@static:1e14647'], 'org/repo@static:1e14647')).toHaveLength(1);
+  });
+});
+
+describe('partitionByExistingIds', () => {
+  it('skips candidates whose computed id already exists, incl. non-ascii titles', () => {
+    const asciiKnown = { title: 'Use Redis Cache', type: 'repo_fact', proposedScope: 'repo', content: 'c', confidence: 0.8, repoId: 'org/repo', sourceRefs: [], evidence: [], riskFlags: [] } as any;
+    const zhFresh = { title: '使用模块化分包架构', type: 'repo_fact', proposedScope: 'repo', content: 'c', confidence: 0.85, repoId: 'org/repo', sourceRefs: [], evidence: [], riskFlags: [] } as any;
+    const zhKnown = { title: '采用单仓多包', type: 'repo_fact', proposedScope: 'repo', content: 'c', confidence: 0.85, repoId: 'org/repo', sourceRefs: [], evidence: [], riskFlags: [] } as any;
+
+    // store contains the ascii title's id and the zhKnown title's id — but NOT zhFresh's id.
+    const existingIds = new Set([
+      idForCandidate(asciiKnown, 'repo'),
+      idForCandidate(zhKnown, 'repo'),
+    ]);
+
+    const { fresh, alreadyKnown } = partitionByExistingIds(
+      [asciiKnown, zhFresh, zhKnown],
+      existingIds,
+      idForCandidate,
+    );
+
+    // zhFresh's id is NOT in the store, so it must survive — proving the empty-slug
+    // "matches every id" bug is gone (slugify('使用模块化分包架构') === '' would have
+    // falsely flagged it duplicate against the unrelated ascii/zhKnown ids).
+    expect(fresh.map((c) => c.title)).toEqual(['使用模块化分包架构']);
+    expect(alreadyKnown.map((k) => k.title).sort()).toEqual(['Use Redis Cache', '采用单仓多包']);
+    expect(alreadyKnown.find((k) => k.title === '采用单仓多包')!.id).toBe(idForCandidate(zhKnown, 'repo'));
   });
 });
