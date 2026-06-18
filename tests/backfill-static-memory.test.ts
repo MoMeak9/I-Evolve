@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { listTrackedFiles, summarizeDocs } from '../scripts/backfill-static-memory.ts';
+import { scanModules } from '../scripts/backfill-static-memory.ts';
 
 function tmpGitRepo(): string {
   const dir = join('/tmp', `ie-static-${randomBytes(4).toString('hex')}`);
@@ -45,6 +46,28 @@ describe('summarizeDocs', () => {
       expect(readme.excerpt).toContain('intro line');
       const cl = docs.find((d) => d.kind === 'changelog')!;
       expect(cl.versions).toEqual(['1.2.0', '1.1.0']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('scanModules', () => {
+  it('reads package.json deps/scripts and links sibling README', () => {
+    const dir = join('/tmp', `ie-mods-${randomBytes(4).toString('hex')}`);
+    mkdirSync(join(dir, 'packages/core'), { recursive: true });
+    try {
+      writeFileSync(join(dir, 'packages/core/package.json'), JSON.stringify({
+        name: '@x/core', dependencies: { dep: '1' }, scripts: { build: 'tsc' },
+      }));
+      writeFileSync(join(dir, 'packages/core/README.md'), '# core\n');
+      const mods = scanModules(dir, ['packages/core/package.json', 'packages/core/README.md']);
+      expect(mods).toHaveLength(1);
+      expect(mods[0].name).toBe('@x/core');
+      expect(mods[0].path).toBe('packages/core');
+      expect(mods[0].manifest.deps).toContain('dep');
+      expect(mods[0].manifest.scripts.build).toBe('tsc');
+      expect(mods[0].readmePath).toBe('packages/core/README.md');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

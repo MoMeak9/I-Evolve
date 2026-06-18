@@ -9,7 +9,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // ---- pack 区（Task 3-5 填充）----
@@ -62,6 +62,38 @@ export function summarizeDocs(repo: string, files: string[]): DocSummary[] {
     }
   }
   return out;
+}
+
+export interface ModuleInfo {
+  path: string;
+  name: string;
+  manifest: { deps: string[]; scripts: Record<string, string> };
+  readmePath?: string;
+}
+
+export function scanModules(repo: string, files: string[]): ModuleInfo[] {
+  const readmeByDir = new Map<string, string>();
+  for (const f of files) {
+    if (basename(f).toLowerCase().startsWith('readme')) readmeByDir.set(dirname(f), f);
+  }
+  const mods: ModuleInfo[] = [];
+  for (const f of files) {
+    if (basename(f) !== 'package.json') continue;
+    let pkg: { name?: string; dependencies?: Record<string, string>; scripts?: Record<string, string> };
+    try {
+      pkg = JSON.parse(readFileSync(join(repo, f), 'utf-8'));
+    } catch {
+      continue; // 坏 manifest：跳过
+    }
+    const dir = dirname(f);
+    mods.push({
+      path: dir,
+      name: pkg.name ?? basename(dir),
+      manifest: { deps: Object.keys(pkg.dependencies ?? {}), scripts: pkg.scripts ?? {} },
+      readmePath: readmeByDir.get(dir),
+    });
+  }
+  return mods;
 }
 // ---- inject 区（Task 6-7 填充）----
 
