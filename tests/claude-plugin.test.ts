@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url';
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const pluginDir = join(root, 'packages', 'claude-plugin');
 
+function hookCommandText(hook: { command: string; args?: string[] }): string {
+  return [hook.command, ...(hook.args ?? [])].join(' ');
+}
+
 describe('Claude plugin structure', () => {
   it('has a valid plugin.json', () => {
     const p = join(pluginDir, '.claude-plugin', 'plugin.json');
@@ -27,24 +31,22 @@ describe('Claude plugin structure', () => {
   it('SessionStart hook calls i-evolve inject', () => {
     const json = JSON.parse(readFileSync(join(pluginDir, 'hooks', 'hooks.json'), 'utf-8'));
     const hook = json.hooks.SessionStart[0].hooks[0];
-    expect(hook.command).toBe('pnpm');
-    expect([hook.command, ...hook.args].join(' ')).toContain('inject');
-    expect(hook.args).toContain('${IEVOLVE_HOME}');
+    expect(hook.type).toBe('command');
+    expect(hookCommandText(hook)).toBe('i-evolve inject --format markdown');
   });
 
   it('PostToolUse hook calls i-evolve observe', () => {
     const json = JSON.parse(readFileSync(join(pluginDir, 'hooks', 'hooks.json'), 'utf-8'));
     const hook = json.hooks.PostToolUse[0].hooks[0];
-    expect(hook.command).toBe('pnpm');
-    expect([hook.command, ...hook.args].join(' ')).toContain('observe');
-    expect(hook.args).toContain('${IEVOLVE_HOME}');
+    expect(hook.type).toBe('command');
+    expect(hookCommandText(hook)).toBe('i-evolve observe --phase post_tool_use --source claude-code');
   });
 
   it('Stop hook calls i-evolve session finalize', () => {
     const json = JSON.parse(readFileSync(join(pluginDir, 'hooks', 'hooks.json'), 'utf-8'));
     const hook = json.hooks.Stop[0].hooks[0];
-    expect(hook.command).toBe('pnpm');
-    expect([hook.command, ...hook.args].join(' ')).toContain('session finalize');
+    expect(hook.type).toBe('command');
+    expect(hookCommandText(hook)).toBe('i-evolve session finalize --auto-evolve');
   });
 
   it('has all five skills', () => {

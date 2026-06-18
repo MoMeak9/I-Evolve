@@ -61,6 +61,48 @@ Preview without writing / 仅预览不写入：
 pnpm tsx apps/cli/src/index.ts setup all --dry-run
 ```
 
+
+## 本地召回与 Embedding / Local Retrieval & Embedding
+
+中文：当前实现与召回方案保持以下一致性：Memory 主存储仍然是 Markdown + Git；检索产物（SQLite/FTS、chunk、后续 vector index、query cache）只作为本地派生缓存；`SessionStart` 与 `UserPromptSubmit` 分别用于基线召回和基于用户 prompt 的动态召回；`UserPromptSubmit` 会先做规则式意图推测，再输出 prompt-specific context。
+
+English: The current implementation follows the proposed retrieval design in these areas: Markdown + Git remains the source of truth for Memory; retrieval artifacts (SQLite/FTS, chunks, future vector indexes, and query cache) are local derived state; `SessionStart` and `UserPromptSubmit` are separate baseline and prompt-specific recall phases; and `UserPromptSubmit` performs rule-based intent inference before producing prompt-specific context.
+
+中文：默认 embedding 模型是 **`BAAI/bge-m3`**，runtime 标记为 `FlagEmbedding`，默认维度为 `1024`，设备为 `auto`。轻量备选 profile 是 `intfloat/multilingual-e5-small`（384 维）和 `BAAI/bge-small-zh-v1.5`（512 维）。当前 MVP 命令会写入本地 `model.lock.yaml` 和诊断信息；实际模型下载、真实 dense vector 生成、sqlite-vec/hnswlib 后端、rerank 与 query cache 仍属于后续迭代。
+
+English: The default embedding model is **`BAAI/bge-m3`** with runtime label `FlagEmbedding`, default dimension `1024`, and device `auto`. Lightweight alternatives are `intfloat/multilingual-e5-small` (384 dimensions) and `BAAI/bge-small-zh-v1.5` (512 dimensions). The current MVP command writes local `model.lock.yaml` metadata and diagnostic output; actual model download, dense vector generation, sqlite-vec/hnswlib backends, reranking, and query cache are still future iterations.
+
+常用命令 / Common commands:
+
+```bash
+# Install or inspect the default local embedding profile / 安装或查看默认本地 embedding profile
+pnpm tsx apps/cli/src/index.ts model install default
+pnpm tsx apps/cli/src/index.ts model status
+pnpm tsx apps/cli/src/index.ts model list
+
+# Rebuild/check the local derived index / 重建或检查本地派生索引
+pnpm tsx apps/cli/src/index.ts index rebuild
+pnpm tsx apps/cli/src/index.ts index doctor
+
+# Infer prompt intent and recall context / 推测用户意图并召回上下文
+pnpm tsx apps/cli/src/index.ts intent infer --prompt "帮我 review SSR 迁移后的水合问题"
+pnpm tsx apps/cli/src/index.ts recall --phase session_start --debug
+pnpm tsx apps/cli/src/index.ts recall --phase user_prompt_submit --query "帮我 review SSR 迁移后的水合问题" --debug
+```
+
+实现状态 / Implementation status:
+
+| Area | Status |
+|---|---|
+| Local-only retrieval artifacts | Implemented as local derived runtime state |
+| Default embedding profile | `BAAI/bge-m3`, `FlagEmbedding`, 1024 dimensions |
+| Intent inference | Implemented with deterministic rules and keywords |
+| Memory-aware chunking | Implemented with `header`, `semantic`, and `operational` chunks |
+| SessionStart/UserPromptSubmit markdown injection | Implemented |
+| Actual embedding model download | Planned |
+| Dense vector backend (`sqlite-vec`/`hnswlib`) | Planned |
+| Hybrid dense + lexical + rerank scoring | Partially planned; current runtime uses existing FTS/debug retrieval path |
+
 ## 验证 / Verify
 
 ```bash
