@@ -8,9 +8,10 @@
  * 不 commit、不 push。详见 docs/superpowers/specs/2026-06-18-static-memory-backfill-design.md
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { detectRepoIdentity } from '@i-evolve/storage';
 
 // ---- pack 区（Task 3-5 填充）----
 
@@ -129,10 +130,106 @@ export function probeFileHeads(repo: string, files: string[]): FileHead[] {
 }
 // ---- inject 区（Task 6-7 填充）----
 
+export interface StaticContextPack {
+  repoId: string;
+  domain?: string;
+  headSha: string;
+  generatedAt: string;
+  tree: string[];
+  modules: ModuleInfo[];
+  docs: DocSummary[];
+  fileHeads: FileHead[];
+  truncated: boolean;
+}
+
+const DEFAULT_MAX_FILES = 2000;
+
+function headSha(repo: string): string {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf-8' }).trim();
+  } catch {
+    return ''; // 无 commit（如全新仓库）：不抛，留空
+  }
+}
+
+/** manifest 所在目录文件优先，其余其次；用于 maxFiles 截断时保住高价值文件。 */
+function prioritizeFiles(files: string[]): string[] {
+  const manifestDirs = new Set(
+    files.filter((f) => basename(f) === 'package.json').map((f) => dirname(f)),
+  );
+  const inManifestDir = (f: string) => manifestDirs.has(dirname(f));
+  return [...files].sort((a, b) => Number(inManifestDir(b)) - Number(inManifestDir(a)));
+}
+
+export function buildContextPack(
+  repo: string,
+  opts: { maxFiles?: number; domain?: string } = {},
+): StaticContextPack {
+  const maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES;
+  const identity = detectRepoIdentity({ cwd: repo, manualDomain: opts.domain });
+  const all = listTrackedFiles(repo);
+  const prioritized = prioritizeFiles(all);
+  const truncated = prioritized.length > maxFiles;
+  const tree = prioritized.slice(0, maxFiles);
+
+  return {
+    repoId: identity.repoId,
+    domain: identity.domain,
+    headSha: headSha(repo),
+    generatedAt: new Date().toISOString(),
+    tree,
+    modules: scanModules(repo, tree),
+    docs: summarizeDocs(repo, tree),
+    fileHeads: probeFileHeads(repo, tree),
+    truncated,
+  };
+}
+
+interface PackArgs { repo: string; out?: string; maxFiles?: number; domain?: string }
+
+function parsePackArgs(argv: string[]): PackArgs {
+  const a: PackArgs = { repo: process.cwd() };
+  for (let i = 1; i < argv.length; i++) {
+    const next = () => argv[++i];
+    switch (argv[i]) {
+      case '--repo': a.repo = next(); break;
+      case '--out': a.out = next(); break;
+      case '--max-files': a.maxFiles = Number(next()); break;
+      case '--domain': a.domain = next(); break;
+    }
+  }
+  return a;
+}
+
+function runPack(argv: string[]): void {
+  const args = parsePackArgs(argv);
+  if (!existsSync(join(args.repo, '.git'))) {
+    console.error(`Not a git repo: ${args.repo}`);
+    process.exit(1);
+  }
+  let pack: StaticContextPack;
+  try {
+    pack = buildContextPack(args.repo, { maxFiles: args.maxFiles, domain: args.domain });
+  } catch (err) {
+    console.error(`pack failed: ${(err as Error).message}`);
+    process.exit(1);
+  }
+  if (pack.truncated) {
+    console.error(`⚠  tree truncated to ${pack.tree.length} files (--max-files); consider 分批处理.`);
+  }
+  const json = JSON.stringify(pack, null, 2);
+  if (args.out) {
+    writeFileSync(args.out, json, 'utf-8');
+    console.error(`pack written to ${args.out} (${pack.tree.length} files, ${pack.modules.length} modules)`);
+  } else {
+    process.stdout.write(json + '\n');
+  }
+}
+
 export async function main(argv: string[]): Promise<void> {
   const sub = argv[0];
   if (sub === 'pack') {
-    console.log('pack: not yet implemented');
+    runPack(argv);
   } else if (sub === 'inject') {
     console.log('inject: not yet implemented');
   } else {

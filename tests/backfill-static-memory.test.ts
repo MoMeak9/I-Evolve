@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { listTrackedFiles, summarizeDocs } from '../scripts/backfill-static-memory.ts';
 import { scanModules } from '../scripts/backfill-static-memory.ts';
 import { probeFileHeads } from '../scripts/backfill-static-memory.ts';
+import { buildContextPack } from '../scripts/backfill-static-memory.ts';
 
 function tmpGitRepo(): string {
   const dir = join('/tmp', `ie-static-${randomBytes(4).toString('hex')}`);
@@ -91,6 +92,29 @@ describe('probeFileHeads', () => {
       expect(bare.hasHeaderDoc).toBe(false);
       expect(bare.exports).toEqual([]);
       expect(heads.find((h) => h.path === 'README.md')).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('buildContextPack', () => {
+  it('assembles pack and truncates tree at maxFiles, manifest dirs first', () => {
+    const dir = join('/tmp', `ie-pack-${randomBytes(4).toString('hex')}`);
+    mkdirSync(join(dir, 'packages/core'), { recursive: true });
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    try {
+      writeFileSync(join(dir, 'packages/core/package.json'), JSON.stringify({ name: '@x/core' }));
+      writeFileSync(join(dir, 'README.md'), '# Root\n');
+      writeFileSync(join(dir, 'z-extra.ts'), 'const z=1;\n');
+      execFileSync('git', ['add', '-A'], { cwd: dir });
+      const pack = buildContextPack(dir, { maxFiles: 2 });
+      expect(pack.headSha).toBe(''); // 无 commit 时 HEAD 取不到 → 空串(不抛)
+      expect(pack.modules.map((m) => m.name)).toContain('@x/core');
+      expect(pack.docs.some((d) => d.kind === 'readme')).toBe(true);
+      expect(pack.tree.length).toBe(2);
+      expect(pack.truncated).toBe(true);
+      expect(pack.tree).toContain('packages/core/package.json');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
