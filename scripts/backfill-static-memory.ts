@@ -193,6 +193,23 @@ export function detectIntraBatchCollisions(
   return { kept, skipped };
 }
 
+/** 照搬 inject-pr-candidates.ts：非 ASCII 标题 slug 为空时回退 <sha>-<titlehash>。 */
+export function idForCandidate(c: CandidateMemory, scope: MemoryScope): string {
+  const ns = (c.repoId ?? 'unknown').replace(/\//g, '-');
+  const sha = (c.sourceRefs ?? []).find((r) => /^[0-9a-f]{7,40}$/.test(r))?.slice(0, 7) ?? 'x';
+  let h = 0;
+  for (const ch of c.title ?? '') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const suffix = `${sha}-${h.toString(36)}`;
+  let slug = (c.title ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!slug) slug = suffix;
+  return `${scope}.${ns}.${slug}`;
+}
+
+/** 把 HEAD 快照标记并入 sourceRefs（去重），保留 candidate 自身的文件/文档锚点。 */
+export function mergeStaticSourceRefs(candidateRefs: string[], snapshotMarker: string): string[] {
+  return [...new Set([...candidateRefs, snapshotMarker])];
+}
+
 export interface StaticContextPack {
   repoId: string;
   domain?: string;

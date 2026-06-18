@@ -8,6 +8,7 @@ import { scanModules } from '../scripts/backfill-static-memory.ts';
 import { probeFileHeads } from '../scripts/backfill-static-memory.ts';
 import { buildContextPack } from '../scripts/backfill-static-memory.ts';
 import { validateCandidates, detectIntraBatchCollisions } from '../scripts/backfill-static-memory.ts';
+import { idForCandidate, mergeStaticSourceRefs } from '../scripts/backfill-static-memory.ts';
 
 function tmpGitRepo(): string {
   const dir = join('/tmp', `ie-static-${randomBytes(4).toString('hex')}`);
@@ -160,5 +161,27 @@ describe('detectIntraBatchCollisions', () => {
     expect(kept.map((c) => c.content)).toEqual(['1', '3']);
     expect(skipped).toHaveLength(1);
     expect(skipped[0].id).toBe('repo.x.a');
+  });
+});
+
+describe('idForCandidate', () => {
+  it('slugifies ascii titles', () => {
+    const c = { title: 'Use Redis Cache', repoId: 'org/repo', sourceRefs: [] } as any;
+    expect(idForCandidate(c, 'repo')).toBe('repo.org-repo.use-redis-cache');
+  });
+  it('falls back to sha+hash for non-ascii titles (no collision)', () => {
+    const a = { title: '使用缓存', repoId: 'org/repo', sourceRefs: ['abc1234'] } as any;
+    const b = { title: '另一个决策', repoId: 'org/repo', sourceRefs: ['abc1234'] } as any;
+    expect(idForCandidate(a, 'repo')).not.toBe(idForCandidate(b, 'repo'));
+    expect(idForCandidate(a, 'repo').startsWith('repo.org-repo.')).toBe(true);
+  });
+});
+
+describe('mergeStaticSourceRefs', () => {
+  it('appends the snapshot marker, dedup, preserves candidate refs', () => {
+    const refs = mergeStaticSourceRefs(['README.md#Architecture'], 'org/repo@static:1e14647');
+    expect(refs).toContain('README.md#Architecture');
+    expect(refs).toContain('org/repo@static:1e14647');
+    expect(mergeStaticSourceRefs(['org/repo@static:1e14647'], 'org/repo@static:1e14647')).toHaveLength(1);
   });
 });
