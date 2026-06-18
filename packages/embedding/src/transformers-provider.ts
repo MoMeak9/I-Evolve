@@ -34,6 +34,10 @@ export class TransformersProvider implements EmbeddingProvider {
     const { pipeline, env } = await import('@xenova/transformers');
     env.cacheDir = MODELS_ROOT;
     env.allowRemoteModels = true;
+    const endpoint = process.env.HF_ENDPOINT?.trim();
+    if (endpoint) {
+      env.remoteHost = endpoint.endsWith('/') ? endpoint : `${endpoint}/`;
+    }
     this.pipe = (await pipeline('feature-extraction', this.spec.modelId)) as unknown as FeatureExtractionPipeline;
     return this.pipe;
   }
