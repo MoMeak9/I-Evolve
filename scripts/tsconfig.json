@@ -13,5 +13,5 @@
       "@i-evolve/ai-evolution": ["packages/ai-evolution/src/index.ts"]
     }
   },
-  "include": ["backfill-git-memory.ts", "inject-pr-candidates.ts", "diagnose-memory.ts"]
+  "include": ["backfill-git-memory.ts", "inject-pr-candidates.ts", "diagnose-memory.ts", "backfill-static-memory.ts"]
 }
