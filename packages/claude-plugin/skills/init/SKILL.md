@@ -32,7 +32,7 @@ yourself, then call the CLI non-interactively:
    ```bash
    i-evolve identity detect
    ```
-   This reports `repoId`, `gitRemote`, suggested `projectId`, and `domain`.
+   This reports `repoId`, `gitRemote`, `domain`.
 2. Ask the user two things:
    - The project id and domain to bind (offer the detected values as defaults).
    - Which remote git repo should store shared memory — list `gitRemote` from

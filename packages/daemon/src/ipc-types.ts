@@ -25,7 +25,6 @@ export type DaemonRequest =
 export interface SessionStartInput {
   sessionId: string;
   repoId?: string;
-  projectId?: string;
   cwd: string;
 }
 
@@ -38,7 +37,6 @@ export interface MemoryRecallInput {
   cwd: string;
   maxTokens?: number;
   repoId?: string;
-  projectId?: string;
   domain?: string;
 }
 
@@ -50,7 +48,6 @@ export interface MemoryRememberInput {
   content: string;
   cwd?: string;
   repoId?: string;
-  projectId?: string;
   domain?: string;
   title?: string;
   type?: MemoryItem['type'];

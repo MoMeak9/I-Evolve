@@ -1,20 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { paths } from '@i-evolve/daemon';
-import {
-  bindProjectIdentity,
-  detectProjectIdentity,
-  readProjectProfile,
-  type ProjectProfileDocument,
-} from '@i-evolve/storage';
+import { detectRepoIdentity } from '@i-evolve/storage';
 import { GitMemorySync } from '@i-evolve/git-sync';
 import { ensureDaemon } from './ensure-daemon.js';
 
 interface InitFlags {
   yes?: boolean;
   'non-interactive'?: boolean;
-  project?: string;
   domain?: string;
   remote?: string;
   'skip-remote'?: boolean;
@@ -24,12 +18,12 @@ interface InitFlags {
 /**
  * Interactive onboarding for the current repository:
  *   1. Auto-start the daemon.
- *   2. Detect project identity and bind it (after confirmation).
+ *   2. Detect repo/domain identity without writing project profile memory records.
  *   3. Ask which remote git repo to use as shared memory (after confirmation).
  *   4. Run a health check.
  *
  * Non-interactive (hooks / scripts): pass --non-interactive to do detection +
- * daemon start only, or --yes / explicit flags to bind and wire remote without prompts.
+ * daemon start only, or --yes / explicit flags to wire remote without prompts.
  */
 export async function handleInitCommand(flags: InitFlags): Promise<void> {
   const cwd = flags.cwd ?? process.cwd();
@@ -46,10 +40,8 @@ export async function handleInitCommand(flags: InitFlags): Promise<void> {
   );
 
   // 2. Identity
-  const detected = detectProjectIdentity({
+  const detected = detectRepoIdentity({
     cwd,
-    profiles: readProfiles(),
-    manualProjectId: flags.project,
     manualDomain: flags.domain,
   });
   console.log(`  repo: ${detected.repoId}`);
@@ -61,27 +53,14 @@ export async function handleInitCommand(flags: InitFlags): Promise<void> {
     return;
   }
 
-  const suggestedProject = detected.projectId ?? basename(detected.repoId);
-  let projectId = flags.project ?? suggestedProject;
   let domain = flags.domain ?? detected.domain;
 
   if (interactive) {
-    const { input, confirm } = await import('@inquirer/prompts');
-    const doBind = await confirm({
-      message: `Bind this repo to a project identity?`,
-      default: true,
-    });
-    if (doBind) {
-      projectId = await input({ message: 'Project id:', default: projectId });
-      domain = (await input({ message: 'Domain (optional):', default: domain ?? '' })) || undefined;
-      bindAndReport(projectId, detected, domain);
-    } else {
-      console.log('  identity: skipped');
-    }
-  } else {
-    // --yes or piped: accept detected/flag values.
-    bindAndReport(projectId, detected, domain);
+    const { input } = await import('@inquirer/prompts');
+    domain = (await input({ message: 'Domain (optional):', default: domain ?? '' })) || undefined;
   }
+  if (domain) console.log(`  domain: ${domain}`);
+  console.log('  identity: repo/domain only (no project profile written)');
 
   // 3. Remote memory repo
   await setupRemote(flags, detected, cwd, interactive);
@@ -91,25 +70,9 @@ export async function handleInitCommand(flags: InitFlags): Promise<void> {
   runDoctor();
 }
 
-function bindAndReport(
-  projectId: string,
-  detected: ReturnType<typeof detectProjectIdentity>,
-  domain: string | undefined,
-): void {
-  const profilePath = bindProjectIdentity({
-    memoryDir: paths.shared.memory,
-    projectId,
-    repoId: detected.repoId,
-    domain,
-    packageNames: detected.packageNames,
-  });
-  console.log(`  identity bound: project=${projectId}${domain ? `, domain=${domain}` : ''}`);
-  console.log(`  profile: ${profilePath}`);
-}
-
 async function setupRemote(
   flags: InitFlags,
-  detected: ReturnType<typeof detectProjectIdentity>,
+  detected: ReturnType<typeof detectRepoIdentity>,
   cwd: string,
   interactive: boolean,
 ): Promise<void> {
@@ -234,27 +197,6 @@ function runDoctor(): void {
   } catch {
     // doctor prints its own diagnostics; ignore non-zero exit here.
   }
-}
-
-function readProfiles(): ProjectProfileDocument[] {
-  const projectsDir = join(paths.shared.memory, 'projects');
-  if (!existsSync(projectsDir)) return [];
-  const profiles: ProjectProfileDocument[] = [];
-  const scan = (dir: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) scan(full);
-      if (entry.isFile() && entry.name === 'project-profile.md') {
-        try {
-          profiles.push(readProjectProfile(readFileSync(full, 'utf-8')));
-        } catch {
-          // ignore malformed profiles
-        }
-      }
-    }
-  };
-  scan(projectsDir);
-  return profiles;
 }
 
 function basename(repoId: string): string {

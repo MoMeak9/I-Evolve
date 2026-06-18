@@ -30,7 +30,6 @@ function makeSummary(over: Partial<SessionSummary> = {}): SessionSummary {
     id: 'session-summary.sess-1',
     sessionId: 'sess-1',
     repoId: 'bilibili/column-web',
-    projectId: 'bilibili-column',
     endedAt: NOW,
     summary: 'Worked on memory module.',
     decisions: [],
@@ -88,8 +87,8 @@ describe('MemoryCandidateExtractor', () => {
     const provider = new MockAiProvider();
     provider.setDefault(JSON.stringify([{
       title: 'Old editor return button',
-      type: 'project_fact',
-      proposedScope: 'project',
+      type: 'repo_fact',
+      proposedScope: 'repo',
       content: 'Old editor content needs a return button.',
       evidence: ['session'],
       sourceRefs: ['session-summary.sess-1'],
@@ -100,16 +99,16 @@ describe('MemoryCandidateExtractor', () => {
     const extractor = new MemoryCandidateExtractor(provider);
     const candidates = await extractor.extract(makeSummary());
     expect(candidates).toHaveLength(1);
-    expect(candidates[0].type).toBe('project_fact');
-    expect(candidates[0].projectId).toBe('bilibili-column');
+    expect(candidates[0].type).toBe('repo_fact');
+    expect(candidates[0].repoId).toBe('bilibili/column-web');
   });
 
   it('flags candidates containing secrets', async () => {
     const provider = new MockAiProvider();
     provider.setDefault(JSON.stringify([{
       title: 'Bad memory',
-      type: 'project_fact',
-      proposedScope: 'project',
+      type: 'repo_fact',
+      proposedScope: 'repo',
       content: 'api_key = "abcdef1234567890"',
       confidence: 0.95,
       riskFlags: [],
@@ -123,14 +122,13 @@ describe('MemoryCandidateExtractor', () => {
 function makeCandidate(over: Partial<CandidateMemory> = {}): CandidateMemory {
   return {
     title: 'Old editor return button',
-    type: 'project_fact',
-    proposedScope: 'project',
+    type: 'repo_fact',
+    proposedScope: 'repo',
     content: 'Old editor content needs a return button.',
     evidence: ['session'],
     sourceRefs: ['session-summary.sess-1'],
     confidence: 0.91,
     riskFlags: [],
-    projectId: 'bilibili-column',
     repoId: 'bilibili/column-web',
     ...over,
   };
@@ -139,11 +137,11 @@ function makeCandidate(over: Partial<CandidateMemory> = {}): CandidateMemory {
 describe('PolicyJudge', () => {
   const judge = new PolicyJudge();
 
-  it('activates high-confidence project_fact', () => {
+  it('activates high-confidence repo_fact', () => {
     const decision = judge.judge(makeCandidate(), {}, NOW);
     expect(decision.decision).toBe('activate');
-    expect(decision.finalScope).toBe('project');
-    expect(decision.ttlDays).toBe(365);
+    expect(decision.finalScope).toBe('repo');
+    expect(decision.ttlDays).toBe(180);
   });
 
   it('rejects low-confidence memory', () => {
@@ -195,8 +193,8 @@ describe('EvolutionPipeline', () => {
     const provider = new MockAiProvider();
     provider.setDefault(JSON.stringify([{
       title: 'Old editor return button',
-      type: 'project_fact',
-      proposedScope: 'project',
+      type: 'repo_fact',
+      proposedScope: 'repo',
       content: 'Old editor needs a return button.',
       confidence: 0.91,
       sourceRefs: ['session-summary.sess-1'],
@@ -225,8 +223,8 @@ describe('EvolutionPipeline', () => {
     const provider = new MockAiProvider();
     provider.setDefault(JSON.stringify([{
       title: 'Some fact',
-      type: 'project_fact',
-      proposedScope: 'project',
+      type: 'repo_fact',
+      proposedScope: 'repo',
       content: 'A fact.',
       confidence: 0.91,
       riskFlags: [],
@@ -251,8 +249,8 @@ describe('EvolutionPipeline', () => {
     const provider = new MockAiProvider();
     provider.setDefault(JSON.stringify([{
       title: 'Weak fact',
-      type: 'project_fact',
-      proposedScope: 'project',
+      type: 'repo_fact',
+      proposedScope: 'repo',
       content: 'Maybe true.',
       confidence: 0.3,
       riskFlags: [],

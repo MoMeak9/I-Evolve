@@ -6,8 +6,6 @@ export type MemoryStatus =
   | 'superseded';
 
 export type MemoryType =
-  | 'user_preference'
-  | 'project_fact'
   | 'repo_fact'
   | 'task_constraint'
   | 'decision'
@@ -17,10 +15,8 @@ export type MemoryType =
 export type MemoryScope =
   | 'global'
   | 'domain'
-  | 'project'
   | 'repo'
-  | 'task'
-  | 'user';
+  | 'task';
 
 export type MemoryVisibility = 'private' | 'team' | 'public';
 

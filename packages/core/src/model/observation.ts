@@ -5,7 +5,6 @@ export interface Observation {
   timestamp: string;
   sessionId: string;
   repoId?: string;
-  projectId?: string;
   cwdHash?: string;
   source: ObservationSource;
   phase: ObservationPhase;

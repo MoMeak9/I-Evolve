@@ -10,9 +10,7 @@ export function decideTtl(type: MemoryType, scope: MemoryScope): number | null {
   switch (scope) {
     case 'task': return 30;
     case 'repo': return 180;
-    case 'project': return 365;
     case 'domain': return 180;
-    case 'user': return type === 'user_preference' ? null : 365;
     case 'global': return 180;
     default: return 180;
   }

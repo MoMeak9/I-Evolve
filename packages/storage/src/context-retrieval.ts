@@ -3,7 +3,6 @@ import type { MarkdownMemoryRepository } from './memory-repository.js';
 
 export interface RetrievalContext {
   repoId?: string;
-  projectId?: string;
   domain?: string;
   packageNames?: string[];
   path?: string;
@@ -13,9 +12,7 @@ export interface RetrievalContext {
 
 export interface TopKLimits {
   repo: number;
-  project: number;
   domain: number;
-  user: number;
   global: number;
   warnings: number;
   recent: number;
@@ -23,9 +20,7 @@ export interface TopKLimits {
 
 const DEFAULT_LIMITS: TopKLimits = {
   repo: 5,
-  project: 5,
   domain: 5,
-  user: 3,
   global: 5,
   warnings: 3,
   recent: 2,
@@ -33,9 +28,7 @@ const DEFAULT_LIMITS: TopKLimits = {
 
 export interface RetrievedContext {
   repo: MemoryItem[];
-  project: MemoryItem[];
   domain: MemoryItem[];
-  user: MemoryItem[];
   global: MemoryItem[];
   warnings: MemoryItem[];
   recent: MemoryItem[];
@@ -123,9 +116,7 @@ export function retrieveContextDebug(
 
   const retrieved = {
     repo: selected.filter((m) => m.scope === 'repo' && !isWarning(m) && !isRecent(m)).sort(byScore).slice(0, limits.repo),
-    project: selected.filter((m) => m.scope === 'project' && !isWarning(m) && !isRecent(m)).sort(byScore).slice(0, limits.project),
     domain: selected.filter((m) => m.scope === 'domain' && !isWarning(m) && !isRecent(m)).sort(byScore).slice(0, limits.domain),
-    user: selected.filter((m) => m.scope === 'user' && m.type === 'user_preference').sort(byScore).slice(0, limits.user),
     global: selected.filter((m) => m.scope === 'global' && m.type === 'workflow_rule').sort(byScore).slice(0, limits.global),
     warnings: selected.filter(isWarning).sort(byScore).slice(0, limits.warnings),
     recent: selected.filter(isRecent).sort(byScore).slice(0, limits.recent),
@@ -144,9 +135,7 @@ function matchesScope(memory: MemoryItem, ctx: RetrievalContext): boolean {
   if (matchesAppliesTo(memory, ctx)) return true;
   switch (memory.scope) {
     case 'repo': return !!ctx.repoId && memory.repoId === ctx.repoId;
-    case 'project': return !!ctx.projectId && memory.projectId === ctx.projectId;
     case 'domain': return !!ctx.domain && memory.domain === ctx.domain;
-    case 'user': return true;
     case 'global': return true;
     case 'task': return false;
     default: return false;
@@ -207,9 +196,7 @@ function scoreMemory(memory: MemoryItem, ftsScores: Map<string, number>): number
 function scopePriority(scope: MemoryItem['scope']): number {
   switch (scope) {
     case 'repo': return 6;
-    case 'project': return 5;
     case 'domain': return 4;
-    case 'user': return 3;
     case 'global': return 2;
     case 'task': return 7;
     default: return 0;
@@ -247,7 +234,6 @@ export function formatContextMarkdown(ctx: RetrievalContext, retrieved: Retrieve
 
   lines.push('## Current Repository');
   if (ctx.repoId) lines.push(`- repo_id: ${ctx.repoId}`);
-  if (ctx.projectId) lines.push(`- project_id: ${ctx.projectId}`);
   if (ctx.domain) lines.push(`- domain: ${ctx.domain}`);
   lines.push('');
 
@@ -261,7 +247,7 @@ export function formatContextMarkdown(ctx: RetrievalContext, retrieved: Retrieve
     lines.push('');
   };
 
-  const highPriority = [...retrieved.repo, ...retrieved.project, ...retrieved.domain, ...retrieved.user];
+  const highPriority = [...retrieved.repo, ...retrieved.domain];
   renderGroup('High Priority Memories', highPriority);
   renderGroup('Active Instincts', retrieved.global);
   renderGroup('Warnings', retrieved.warnings);

@@ -10,7 +10,6 @@ export interface CandidateMemory {
   confidence: number;
   riskFlags: string[];
   repoId?: string;
-  projectId?: string;
   domain?: string;
 }
 

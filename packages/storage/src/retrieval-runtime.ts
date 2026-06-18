@@ -12,13 +12,11 @@ export interface PromptIntent {
   raw_prompt: string;
   task_type: PromptTaskType;
   domain?: string;
-  project_id?: string;
   action_level: ActionLevel;
   expected_output: ExpectedOutput;
   risk_flags: string[];
   memory_needs: {
-    need_user_preference: boolean;
-    need_project_fact: boolean;
+    need_repo_fact: boolean;
     need_task_constraint: boolean;
     need_instinct: boolean;
     need_domain_rule: boolean;
@@ -39,8 +37,8 @@ export interface MemoryChunk {
     type: string;
     scope: string;
     agent_id: string;
-    project_id?: string;
-    domain?: string;
+    repo_id?: string;
+      domain?: string;
     status: string;
     visibility: string;
     confidence: number;
@@ -64,7 +62,7 @@ const DOMAIN_KEYWORDS: Array<[string, string[]]> = [
   ['git', ['git', 'branch', 'commit', '分支', '提交']],
 ];
 
-export function inferPromptIntent(rawPrompt: string, options: { projectId?: string } = {}): PromptIntent {
+export function inferPromptIntent(rawPrompt: string): PromptIntent {
   const prompt = rawPrompt.trim();
   const lower = prompt.toLowerCase();
   const has = (words: string[]) => words.some((word) => lower.includes(word.toLowerCase()));
@@ -99,13 +97,11 @@ export function inferPromptIntent(rawPrompt: string, options: { projectId?: stri
     raw_prompt: prompt,
     task_type,
     domain,
-    project_id: options.projectId,
     action_level,
     expected_output,
     risk_flags,
     memory_needs: {
-      need_user_preference: true,
-      need_project_fact: ['code_edit', 'code_review', 'debug', 'architecture_analysis'].includes(task_type),
+      need_repo_fact: ['code_edit', 'code_review', 'debug', 'architecture_analysis'].includes(task_type),
       need_task_constraint: action_level !== 'read_only',
       need_instinct: true,
       need_domain_rule: Boolean(domain),
@@ -122,7 +118,7 @@ export function chunkMemory(memory: MemoryItem, indexedAt = new Date().toISOStri
     type: memory.type,
     scope: memory.scope,
     agent_id: '*',
-    project_id: memory.projectId,
+    repo_id: memory.repoId,
     domain: memory.domain,
     status: memory.status,
     visibility: memory.visibility,
@@ -133,7 +129,7 @@ export function chunkMemory(memory: MemoryItem, indexedAt = new Date().toISOStri
     git_commit: memory.sourceGitCommit,
   };
   const specs = [
-    ['header', `${memory.id} ${memory.title} ${memory.type} ${memory.scope} ${memory.tags.join(' ')} ${memory.projectId ?? ''} ${memory.domain ?? ''}`],
+    ['header', `${memory.id} ${memory.title} ${memory.type} ${memory.scope} ${memory.tags.join(' ')} ${memory.repoId ?? ''} ${memory.domain ?? ''}`],
     ['semantic', `${memory.title}\n${memory.content}`],
     ['operational', `${memory.type}: ${memory.title}\n${memory.content}`],
   ] as const;
@@ -153,17 +149,15 @@ export function chunkMemory(memory: MemoryItem, indexedAt = new Date().toISOStri
 }
 
 export function recallMarkdown(repo: MarkdownMemoryRepository, phase: RecallPhase, ctx: RetrievalContext, options: { prompt?: string; debug?: boolean } = {}): string {
-  const intent = phase === 'user_prompt_submit' ? inferPromptIntent(options.prompt ?? ctx.query ?? '', { projectId: ctx.projectId }) : undefined;
+  const intent = phase === 'user_prompt_submit' ? inferPromptIntent(options.prompt ?? ctx.query ?? '') : undefined;
   const query = intent?.search_queries[0] ?? ctx.query;
   const result = retrieveContextDebug(repo, { ...ctx, query, domain: intent?.domain ?? ctx.domain });
   return phase === 'session_start' ? formatSessionStart(result, options.debug) : formatPromptSpecific(result, intent, options.debug);
 }
 
 function formatSessionStart(result: RetrievalDebugResult, debug = false): string {
-  const lines = ['# i-evolve Baseline Context', '', '## Current Project Memory'];
-  appendItems(lines, [...result.retrieved.repo, ...result.retrieved.project, ...result.retrieved.domain]);
-  lines.push('', '## User Preferences');
-  appendItems(lines, result.retrieved.user);
+  const lines = ['# i-evolve Baseline Context', '', '## Current Repo/Domain Memory'];
+  appendItems(lines, [...result.retrieved.repo, ...result.retrieved.domain]);
   lines.push('', '## Guardrails');
   appendItems(lines, [...result.retrieved.global, ...result.retrieved.warnings]);
   if (debug) appendDebug(lines, result);

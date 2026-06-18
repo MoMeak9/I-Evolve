@@ -59,7 +59,7 @@ export async function handleIntentCommand(subcommand: string | undefined, flags:
   }
   const prompt = (flags.prompt as string | undefined) ?? (flags.query as string | undefined) ?? '';
   if (!prompt) { console.error('Error: --prompt required'); process.exit(1); }
-  console.log(JSON.stringify(inferPromptIntent(prompt, { projectId: flags['project-id'] as string | undefined }), null, 2));
+  console.log(JSON.stringify(inferPromptIntent(prompt), null, 2));
 }
 
 export async function handleRecallCommand(flags: Record<string, unknown>): Promise<void> {
@@ -71,7 +71,6 @@ export async function handleRecallCommand(flags: Record<string, unknown>): Promi
   const repo = getRepo();
   const markdown = recallMarkdown(repo, phase, {
     repoId: flags['repo-id'] as string | undefined,
-    projectId: flags['project-id'] as string | undefined,
     domain: flags.domain as string | undefined,
     query: (flags.query as string | undefined) ?? (flags.prompt as string | undefined),
   }, {

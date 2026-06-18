@@ -68,7 +68,6 @@ export async function handleEvolveCommand(subcommand: string | undefined, flags:
         tags: input.tags,
         sourceRefs: input.sourceRefs,
         repoId: input.repoId,
-        projectId: input.projectId,
         domain: input.domain,
       } as any);
     },

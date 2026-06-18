@@ -4,7 +4,6 @@ export interface IndexQuery {
   text: string;
   scope?: string[];
   repoId?: string;
-  projectId?: string;
   limit?: number;
 }
 

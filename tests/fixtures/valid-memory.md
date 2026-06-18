@@ -1,8 +1,8 @@
 ---
 id: project.bilibili-column.old-editor-return-button
-type: project_fact
-scope: project
-project_id: bilibili-column
+type: repo_fact
+scope: repo
+repo_id: bilibili-column
 repo_id: bilibili/column-web
 title: Old Editor Return Button
 status: active

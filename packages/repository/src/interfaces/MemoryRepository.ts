@@ -6,7 +6,6 @@ export interface MemoryFilter {
   status?: MemoryStatus[];
   scope?: string[];
   repoId?: string;
-  projectId?: string;
   domain?: string;
   tags?: string[];
 }
@@ -15,7 +14,6 @@ export interface MemorySearchQuery {
   text: string;
   scope?: string[];
   repoId?: string;
-  projectId?: string;
   limit?: number;
 }
 
@@ -32,7 +30,6 @@ export interface CreateMemoryInput {
   content: string;
   confidence: number;
   repoId?: string;
-  projectId?: string;
   domain?: string;
   tags?: string[];
   sourceRefs?: string[];

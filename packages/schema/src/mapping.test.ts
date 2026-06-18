@@ -3,7 +3,7 @@ import { snakeToCamel, camelToSnake, mapKeysSnakeToCamel, mapKeysCamelToSnake } 
 
 describe('snakeToCamel', () => {
   it('converts snake_case to camelCase', () => {
-    expect(snakeToCamel('project_id')).toBe('projectId');
+    expect(snakeToCamel('repo_id')).toBe('repoId');
     expect(snakeToCamel('content_hash')).toBe('contentHash');
     expect(snakeToCamel('source_git_commit')).toBe('sourceGitCommit');
   });
@@ -15,7 +15,7 @@ describe('snakeToCamel', () => {
 
 describe('camelToSnake', () => {
   it('converts camelCase to snake_case', () => {
-    expect(camelToSnake('projectId')).toBe('project_id');
+    expect(camelToSnake('repoId')).toBe('repo_id');
     expect(camelToSnake('contentHash')).toBe('content_hash');
     expect(camelToSnake('sourceGitCommit')).toBe('source_git_commit');
   });
@@ -24,7 +24,7 @@ describe('camelToSnake', () => {
 describe('mapKeysSnakeToCamel', () => {
   it('maps all keys recursively', () => {
     const input = {
-      project_id: 'test',
+      repo_id: 'acme/test',
       applies_to: {
         repo_patterns: ['a'],
         path_patterns: ['b'],
@@ -32,7 +32,7 @@ describe('mapKeysSnakeToCamel', () => {
     };
     const result = mapKeysSnakeToCamel(input);
     expect(result).toEqual({
-      projectId: 'test',
+      repoId: 'acme/test',
       appliesTo: {
         repoPatterns: ['a'],
         pathPatterns: ['b'],
@@ -44,14 +44,14 @@ describe('mapKeysSnakeToCamel', () => {
 describe('mapKeysCamelToSnake', () => {
   it('maps all keys recursively', () => {
     const input = {
-      projectId: 'test',
+      repoId: 'acme/test',
       appliesTo: {
         repoPatterns: ['a'],
       },
     };
     const result = mapKeysCamelToSnake(input);
     expect(result).toEqual({
-      project_id: 'test',
+      repo_id: 'acme/test',
       applies_to: {
         repo_patterns: ['a'],
       },

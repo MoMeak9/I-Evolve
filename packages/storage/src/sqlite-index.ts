@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS memories (
   type TEXT NOT NULL,
   scope TEXT NOT NULL,
   repo_id TEXT,
-  project_id TEXT,
   domain TEXT,
   title TEXT NOT NULL,
   status TEXT NOT NULL,
@@ -38,7 +37,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
 
 CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status);
 CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
-CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id);
 CREATE INDEX IF NOT EXISTS idx_memories_repo ON memories(repo_id);
 `;
 
@@ -56,13 +54,13 @@ export class SqliteIndex {
     const tx = this.db.transaction(() => {
       this.db.prepare(`
         INSERT OR REPLACE INTO memories
-        (id, type, scope, repo_id, project_id, domain, title, status, visibility,
+        (id, type, scope, repo_id, domain, title, status, visibility,
          confidence, ttl_days, expires_at, revision, content_hash, file_path,
          source_git_commit, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         memory.id, memory.type, memory.scope,
-        memory.repoId ?? null, memory.projectId ?? null, memory.domain ?? null,
+        memory.repoId ?? null, memory.domain ?? null,
         memory.title, memory.status, memory.visibility,
         memory.confidence, memory.ttlDays ?? null, memory.expiresAt ?? null,
         memory.revision, memory.contentHash, filePath,
@@ -99,12 +97,11 @@ export class SqliteIndex {
     return { ...row, tags: tags.map((t) => t.tag) };
   }
 
-  listMemories(filter?: { status?: string; scope?: string; projectId?: string; repoId?: string }): Array<Record<string, unknown> & { tags: string[] }> {
+  listMemories(filter?: { status?: string; scope?: string; repoId?: string }): Array<Record<string, unknown> & { tags: string[] }> {
     let sql = 'SELECT * FROM memories WHERE 1=1';
     const params: unknown[] = [];
     if (filter?.status) { sql += ' AND status = ?'; params.push(filter.status); }
     if (filter?.scope) { sql += ' AND scope = ?'; params.push(filter.scope); }
-    if (filter?.projectId) { sql += ' AND project_id = ?'; params.push(filter.projectId); }
     if (filter?.repoId) { sql += ' AND repo_id = ?'; params.push(filter.repoId); }
     sql += ' ORDER BY updated_at DESC';
     const rows = this.db.prepare(sql).all(...params) as Array<Record<string, unknown>>;

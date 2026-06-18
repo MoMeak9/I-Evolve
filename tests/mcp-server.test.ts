@@ -20,8 +20,8 @@ function makeDaemon(overrides: Partial<DaemonClient> = {}): DaemonClient {
   return {
     health: async () => ({ ok: true, data: { status: 'running' } }),
     recall: async () => '# I-Evolve Context\n\n## Current Repository\n- repo_id: acme/editor\n',
-    searchMemory: async () => [{ id: 'project.demo.fact', scope: 'project', confidence: 0.9, reason: 'project_id matched' }],
-    auditMemory: async () => [{ id: 'audit.1', action: 'ai_approve', memoryId: 'project.demo.fact' }],
+    searchMemory: async () => [{ id: 'repo.acme-demo.fact', scope: 'repo', confidence: 0.9, reason: 'repo_id matched' }],
+    auditMemory: async () => [{ id: 'audit.1', action: 'ai_approve', memoryId: 'repo.acme-demo.fact' }],
     explainMemory: async () => 'ai_approve by i-evolve-policy-v1',
     forget: async () => ({ auditId: 'audit.forget.1' }),
     syncMemory: async () => ({ message: 'pulled' }),
@@ -42,7 +42,7 @@ describe('mcp server handlers', () => {
     const result = await handlers.recall({ query: 'SSR', cwd: '/tmp/repo', maxTokens: 2000 });
     expect(result.ok).toBe(true);
     expect(result.data.context).toContain('# I-Evolve Context');
-    expect(result.data.memories[0].reason).toContain('project');
+    expect(result.data.memories[0].reason).toContain('repo');
   });
 
   it('forget delegates to daemon client and returns audit id', async () => {
@@ -53,15 +53,15 @@ describe('mcp server handlers', () => {
         return { auditId: 'audit.forget.2' };
       },
     }));
-    const result = await handlers.forget({ memoryId: 'project.demo.fact', mode: 'soft' });
-    expect(calls).toEqual([{ memoryId: 'project.demo.fact', mode: 'soft' }]);
+    const result = await handlers.forget({ memoryId: 'repo.acme-demo.fact', mode: 'soft' });
+    expect(calls).toEqual([{ memoryId: 'repo.acme-demo.fact', mode: 'soft' }]);
     expect(result.auditId).toBe('audit.forget.2');
   });
 
   it('search and explain expose readable memory context', async () => {
     const handlers = createMcpHandlers(makeDaemon());
-    expect((await handlers.search_memory({ query: 'fact' })).data[0].id).toBe('project.demo.fact');
-    expect((await handlers.explain_memory({ memoryId: 'project.demo.fact' })).data.explanation).toContain('ai_approve');
+    expect((await handlers.search_memory({ query: 'fact' })).data[0].id).toBe('repo.acme-demo.fact');
+    expect((await handlers.explain_memory({ memoryId: 'repo.acme-demo.fact' })).data.explanation).toContain('ai_approve');
   });
 });
 
@@ -75,10 +75,10 @@ describe('mcp stdio transport', () => {
       dbPath: join(paths.base, 'shared', 'index.db'),
     });
     repo.create({
-      id: 'project.demo.mcp-recall',
-      type: 'project_fact',
-      scope: 'project',
-      projectId: 'demo',
+      id: 'repo.acme-demo.mcp-recall',
+      type: 'repo_fact',
+      scope: 'repo',
+      repoId: 'acme/demo',
       title: 'MCP Recall',
       content: 'MCP clients recall daemon-backed project memory.',
       status: 'active',
@@ -120,7 +120,7 @@ describe('mcp stdio transport', () => {
         method: 'tools/call',
         params: {
           name: 'recall',
-          arguments: { query: 'MCP clients', cwd: baseDir, projectId: 'demo' },
+          arguments: { query: 'MCP clients', cwd: baseDir, repoId: 'acme/demo' },
         },
       });
       expect(recalled.result.content[0].text).toContain('daemon-backed project memory');

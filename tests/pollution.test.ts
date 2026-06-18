@@ -48,18 +48,18 @@ describe('pollution safeguards', () => {
   it('does not inject deprecated or rejected memories', () => {
     withRepo((repo) => {
       repo.create({
-        id: 'project.demo.deprecated', type: 'project_fact', scope: 'project', projectId: 'demo',
+        id: 'repo.acme-demo.deprecated', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
         title: 'Deprecated', content: 'Old rule.', status: 'active', visibility: 'team',
         confidence: 0.9, ttlDays: 90, tags: [], sourceRefs: [],
       });
-      repo.forget('project.demo.deprecated', 'soft');
+      repo.forget('repo.acme-demo.deprecated', 'soft');
       repo.create({
-        id: 'project.demo.rejected', type: 'project_fact', scope: 'project', projectId: 'demo',
+        id: 'repo.acme-demo.rejected', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
         title: 'Rejected', content: 'Bad rule.', status: 'rejected', visibility: 'team',
         confidence: 0.9, ttlDays: 90, tags: [], sourceRefs: [],
       } as any);
-      const result = retrieveContext(repo, { projectId: 'demo' });
-      expect([...result.project, ...result.global, ...result.warnings].map((m) => m.id)).toEqual([]);
+      const result = retrieveContext(repo, { repoId: 'acme/demo' });
+      expect([...result.repo, ...result.global, ...result.warnings].map((m) => m.id)).toEqual([]);
     });
   });
 
@@ -88,7 +88,7 @@ describe('pollution safeguards', () => {
     try {
       const resp = await sendRequest({
         type: 'memory.remember',
-        payload: { content: 'API key sk-1234567890abcdef should not be saved.', cwd: dir, projectId: 'demo' },
+        payload: { content: 'API key sk-1234567890abcdef should not be saved.', cwd: dir, repoId: 'acme/demo' },
       } as any);
       expect(resp.ok).toBe(false);
       expect(resp.error?.code).toBe('SENSITIVE_MEMORY_BLOCKED');
@@ -103,7 +103,7 @@ describe('pollution safeguards', () => {
     setBasePath(dir);
     await expect(sendRequest({
       type: 'memory.remember',
-      payload: { content: 'Should fail.', cwd: dir, projectId: 'demo' },
+      payload: { content: 'Should fail.', cwd: dir, repoId: 'acme/demo' },
     } as any)).rejects.toBeInstanceOf(DaemonNotRunningError);
     rmSync(dir, { recursive: true, force: true });
   });
@@ -111,7 +111,7 @@ describe('pollution safeguards', () => {
   it('detects concurrent revision conflicts', () => {
     withRepo((repo) => {
       const memory = repo.create({
-        id: 'project.demo.conflict', type: 'project_fact', scope: 'project', projectId: 'demo',
+        id: 'repo.acme-demo.conflict', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
         title: 'Conflict', content: 'First.', status: 'active', visibility: 'team',
         confidence: 0.9, ttlDays: 90, tags: [], sourceRefs: [],
       });
