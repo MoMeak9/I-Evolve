@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { l2Normalize, meanPool, PROFILES, resolveProfile } from './provider.js';
+import { createProvider } from './factory.js';
+import { OllamaProvider } from './ollama-provider.js';
 
 describe('embedding vector utils', () => {
   it('l2-normalizes a vector to unit length', () => {
@@ -27,5 +29,18 @@ describe('embedding vector utils', () => {
 
   it('exposes the default profile as bge-m3', () => {
     expect(PROFILES.default.modelId).toBe('BAAI/bge-m3');
+  });
+});
+
+describe('provider factory', () => {
+  it('creates a TransformersProvider for the lite profile by default', () => {
+    const p = createProvider();
+    expect(p.id).toBe('intfloat/multilingual-e5-small');
+    expect(p.dimension).toBe(384);
+  });
+
+  it('ollama provider throws not-implemented on embed', async () => {
+    const p = new OllamaProvider({ profile: 'lite', modelId: 'x', dimension: 384, queryPrefix: '', docPrefix: '' });
+    await expect(p.embed(['hi'], 'query')).rejects.toThrow(/not implemented/i);
   });
 });
