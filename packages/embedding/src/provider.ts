@@ -19,9 +19,9 @@ export interface ProfileSpec {
 }
 
 export const PROFILES: Record<ProfileName, ProfileSpec> = {
-  lite: { profile: 'lite', modelId: 'intfloat/multilingual-e5-small', dimension: 384, queryPrefix: 'query: ', docPrefix: 'passage: ' },
-  default: { profile: 'default', modelId: 'BAAI/bge-m3', dimension: 1024, queryPrefix: '', docPrefix: '' },
-  chinese_lite: { profile: 'chinese_lite', modelId: 'BAAI/bge-small-zh-v1.5', dimension: 512, queryPrefix: '', docPrefix: '' },
+  lite: { profile: 'lite', modelId: 'Xenova/multilingual-e5-small', dimension: 384, queryPrefix: 'query: ', docPrefix: 'passage: ' },
+  default: { profile: 'default', modelId: 'Xenova/bge-m3', dimension: 1024, queryPrefix: '', docPrefix: '' },
+  chinese_lite: { profile: 'chinese_lite', modelId: 'Xenova/bge-small-zh-v1.5', dimension: 512, queryPrefix: '', docPrefix: '' },
 };
 
 export function resolveProfile(name: string | undefined): ProfileSpec {

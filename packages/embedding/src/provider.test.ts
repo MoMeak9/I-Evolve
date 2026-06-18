@@ -18,7 +18,7 @@ describe('embedding vector utils', () => {
   });
 
   it('maps the lite profile to multilingual-e5-small with dim 384', () => {
-    expect(resolveProfile('lite').modelId).toBe('intfloat/multilingual-e5-small');
+    expect(resolveProfile('lite').modelId).toBe('Xenova/multilingual-e5-small');
     expect(resolveProfile('lite').dimension).toBe(384);
   });
 
@@ -28,14 +28,14 @@ describe('embedding vector utils', () => {
   });
 
   it('exposes the default profile as bge-m3', () => {
-    expect(PROFILES.default.modelId).toBe('BAAI/bge-m3');
+    expect(PROFILES.default.modelId).toBe('Xenova/bge-m3');
   });
 });
 
 describe('provider factory', () => {
   it('creates a TransformersProvider for the lite profile by default', () => {
     const p = createProvider();
-    expect(p.id).toBe('intfloat/multilingual-e5-small');
+    expect(p.id).toBe('Xenova/multilingual-e5-small');
     expect(p.dimension).toBe(384);
   });
 
