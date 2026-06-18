@@ -56,8 +56,8 @@ export class ModelManager {
   private readField(modelId: string, key: string): string | null {
     const path = this.lockPath(modelId);
     if (!existsSync(path)) return null;
-    const line = readFileSync(path, 'utf-8').split('\n').find((l) => l.startsWith(`${key}:`));
-    return line ? line.slice(key.length + 1).trim() : null;
+    const line = readFileSync(path, 'utf-8').split('\n').find((l) => l.startsWith(`${key}: `));
+    return line ? line.slice(key.length + 2).trim() : null;
   }
 
   status(profileName: string): ModelStatus {
