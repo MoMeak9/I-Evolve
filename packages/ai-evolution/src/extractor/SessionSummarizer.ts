@@ -20,7 +20,6 @@ interface SummaryModelOutput {
 export interface SummarizeInput {
   sessionId: string;
   repoId?: string;
-  projectId?: string;
   observations: Observation[];
   startedAt?: string;
   endedAt: string;
@@ -65,7 +64,6 @@ export class SessionSummarizer {
       id: `session-summary.${input.sessionId}`,
       sessionId: input.sessionId,
       repoId: input.repoId,
-      projectId: input.projectId,
       startedAt: input.startedAt,
       endedAt: input.endedAt,
       summary: parsed.summary ?? '',

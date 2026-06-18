@@ -18,7 +18,6 @@ export interface CreateMemoryFromDecisionInput {
   tags: string[];
   sourceRefs: string[];
   repoId?: string;
-  projectId?: string;
   domain?: string;
 }
 
@@ -105,7 +104,6 @@ export class EvolutionPipeline {
         tags: [],
         sourceRefs: candidate.sourceRefs,
         repoId: candidate.repoId,
-        projectId: candidate.projectId,
         domain: candidate.domain,
       });
     }
@@ -122,7 +120,6 @@ export class EvolutionPipeline {
 function defaultId(candidate: CandidateMemory, scope: MemoryScope): string {
   const slug = candidate.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const ns =
-    scope === 'project' ? candidate.projectId :
     scope === 'repo' ? candidate.repoId?.replace(/\//g, '-') :
     scope === 'domain' ? candidate.domain :
     scope;

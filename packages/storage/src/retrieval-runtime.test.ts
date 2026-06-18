@@ -6,8 +6,8 @@ function memory(overrides: Partial<MemoryItem> = {}): MemoryItem {
   return {
     id: 'workflow.ssr.hydration-check',
     type: 'workflow_rule',
-    scope: 'project',
-    projectId: 'web',
+    scope: 'repo',
+    repoId: 'acme/web',
     domain: 'ssr',
     title: 'SSR hydration review checklist',
     content: 'Check client/server rendering differences before approving SSR migrations.',
@@ -40,7 +40,7 @@ describe('retrieval runtime', () => {
     const second = chunkMemory(memory(), '2026-06-18T00:00:00.000Z');
     expect(first.map((chunk) => chunk.chunk_type)).toEqual(['header', 'semantic', 'operational']);
     expect(first.map((chunk) => chunk.chunk_id)).toEqual(second.map((chunk) => chunk.chunk_id));
-    expect(first[0].metadata.project_id).toBe('web');
+    expect(first[0].metadata.repo_id).toBe('acme/web');
     expect(first[0].index.embedding_model).toBe('BAAI/bge-m3');
   });
 });

@@ -27,7 +27,6 @@ function buildPrompt(summary: SessionSummary): string {
     userCorrections: summary.userCorrections,
     candidateMemoryHints: summary.candidateMemoryHints,
     repoId: summary.repoId,
-    projectId: summary.projectId,
   }, null, 2);
 }
 
@@ -48,7 +47,6 @@ function normalize(c: Partial<CandidateMemory>, summary: SessionSummary): Candid
     confidence: typeof c.confidence === 'number' ? c.confidence : 0.5,
     riskFlags: [...new Set(riskFlags)],
     repoId: c.repoId ?? summary.repoId,
-    projectId: c.projectId ?? summary.projectId,
     domain: c.domain,
   };
 }

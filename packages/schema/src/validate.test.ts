@@ -4,9 +4,9 @@ import { validateMemory, validateObservation, validateAuditAction, detectCamelCa
 describe('validateMemory', () => {
   const validMemory = {
     id: 'test.memory.1',
-    type: 'project_fact',
-    scope: 'project',
-    project_id: 'test-project',
+    type: 'repo_fact',
+    scope: 'repo',
+    repo_id: 'test-project',
     title: 'Test Memory',
     status: 'active',
     visibility: 'team',
@@ -41,8 +41,8 @@ describe('validateMemory', () => {
     expect(result.valid).toBe(false);
   });
 
-  it('should fail when project scope lacks project_id', () => {
-    const { project_id, ...noProjectId } = validMemory;
+  it('should fail when repo scope lacks repo_id', () => {
+    const { repo_id, ...noProjectId } = validMemory;
     const result = validateMemory(noProjectId);
     expect(result.valid).toBe(false);
   });
@@ -51,7 +51,7 @@ describe('validateMemory', () => {
     const result = validateMemory({
       ...validMemory,
       scope: 'repo',
-      project_id: undefined,
+      repo_id: undefined,
     });
     expect(result.valid).toBe(false);
   });
@@ -108,15 +108,15 @@ describe('validateAuditAction', () => {
 
 describe('detectCamelCaseKeys', () => {
   it('should detect camelCase keys', () => {
-    const data = { projectId: 'test', repoId: 'r', scope: 'project' };
+    const data = { repoId: 'r', domainName: 'web', scope: 'repo' };
     const result = detectCamelCaseKeys(data);
-    expect(result).toContain('projectId');
     expect(result).toContain('repoId');
+    expect(result).toContain('domainName');
     expect(result).not.toContain('scope');
   });
 
   it('should return empty for snake_case keys', () => {
-    const data = { project_id: 'test', repo_id: 'r', scope: 'project' };
+    const data = { repo_id: 'r', domain_name: 'web', scope: 'repo' };
     const result = detectCamelCaseKeys(data);
     expect(result).toHaveLength(0);
   });

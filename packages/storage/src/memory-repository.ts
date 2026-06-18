@@ -35,7 +35,7 @@ export class MarkdownMemoryRepository {
     return { ...camel, content };
   }
 
-  list(filter?: { status?: string; scope?: string; projectId?: string; repoId?: string }): MemoryItem[] {
+  list(filter?: { status?: string; scope?: string; repoId?: string }): MemoryItem[] {
     const rows = this.index.listMemories(filter);
     return rows.map((row) => {
       const filePath = row.file_path as string;
@@ -203,9 +203,7 @@ export class MarkdownMemoryRepository {
     switch (scope) {
       case 'global': namespace = 'global'; break;
       case 'domain': namespace = `domains/${memory.domain ?? 'unknown'}`; break;
-      case 'project': namespace = `projects/${memory.projectId ?? 'unknown'}`; break;
       case 'repo': namespace = `repos/${memory.repoId?.replace(/\//g, '-') ?? 'unknown'}`; break;
-      case 'user': namespace = `users/${memory.id.split('.')[0] ?? 'unknown'}`; break;
       case 'task': namespace = `tasks`; break;
       default: namespace = 'other';
     }

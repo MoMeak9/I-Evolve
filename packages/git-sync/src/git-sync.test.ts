@@ -33,9 +33,9 @@ function writeMemory(dir: string, id: string, contentHash = computeContentHash('
   writeFileSync(join(sub, `${slug}.md`), [
     '---',
     `id: ${id}`,
-    'type: project_fact',
-    'scope: project',
-    'project_id: demo',
+    'type: repo_fact',
+    'scope: repo',
+    'repo_id: acme/demo',
     'title: A Fact',
     'status: active',
     'visibility: team',
@@ -80,7 +80,7 @@ describe('GitMemorySync', () => {
     gitInit(workDir);
     execFileSync('git', ['remote', 'add', 'origin', remoteDir], { cwd: workDir });
     writePack(workDir);
-    writeMemory(workDir, 'project.demo.a-fact');
+    writeMemory(workDir, 'repo.acme-demo.a-fact');
   });
 
   it('reports status with current commit', async () => {
@@ -104,8 +104,8 @@ describe('GitMemorySync', () => {
     await sync.commit({ message: 'memory(auto): initial' });
     // introduce a secret into a tracked memory
     writeFileSync(join(workDir, 'projects', 'demo', 'leak.md'), [
-      '---', 'id: project.demo.leak', 'type: project_fact', 'scope: project',
-      'project_id: demo', 'title: Leak', 'status: active', 'visibility: team',
+      '---', 'id: repo.acme-demo.leak', 'type: repo_fact', 'scope: repo',
+      'repo_id: acme/demo', 'title: Leak', 'status: active', 'visibility: team',
       'confidence: 0.9', 'revision: 1', 'content_hash: sha256:x',
       'created_at: 2026-06-12T10:00:00+08:00', 'updated_at: 2026-06-12T10:00:00+08:00',
       '---', '', 'token AKIAABCDEFGHIJKLMNOP here', '',
@@ -126,7 +126,7 @@ describe('GitMemorySync', () => {
     const sync = new GitMemorySync(workDir);
     await sync.commit({ message: 'memory(auto): initial' });
     // Write a new memory but do NOT commit it (mimics `memory add`).
-    writeMemory(workDir, 'project.demo.uncommitted');
+    writeMemory(workDir, 'repo.acme-demo.uncommitted');
     expect(sync.status().clean).toBe(false);
 
     const result = await sync.push();
@@ -153,7 +153,7 @@ describe('GitMemorySync', () => {
     const sync = new GitMemorySync(workDir);
     await sync.commit({ message: 'memory(auto): first' });
     const first = sync.status().commit;
-    writeMemory(workDir, 'project.demo.second-fact');
+    writeMemory(workDir, 'repo.acme-demo.second-fact');
     await sync.commit({ message: 'memory(auto): second' });
     const result = await sync.rollback({ toCommit: first, mode: 'checkout' });
     expect(result.ok).toBe(true);
@@ -169,7 +169,7 @@ describe('GitMemorySync', () => {
     execFileSync('git', ['clone', remoteDir, other]);
     execFileSync('git', ['config', 'user.email', 'test@i-evolve.dev'], { cwd: other });
     execFileSync('git', ['config', 'user.name', 'Test'], { cwd: other });
-    writeMemory(other, 'project.demo.remote-fact');
+    writeMemory(other, 'repo.acme-demo.remote-fact');
     execFileSync('git', ['add', '-A'], { cwd: other });
     execFileSync('git', ['commit', '-m', 'memory(auto): remote fact'], { cwd: other });
     execFileSync('git', ['push'], { cwd: other });
@@ -192,7 +192,7 @@ describe('GitMemorySync', () => {
     const sync = new GitMemorySync(workDir);
     await sync.commit({ message: 'memory(auto): first' });
     const first = sync.status().commit;
-    writeMemory(workDir, 'project.demo.second-fact');
+    writeMemory(workDir, 'repo.acme-demo.second-fact');
     await sync.commit({ message: 'memory(auto): second' });
 
     const events: string[] = [];
@@ -216,7 +216,7 @@ describe('GitMemorySync.attach', () => {
   const seedDir = join(base, 'seed');
   const targetDir = join(base, 'target');
 
-  // Build a non-empty remote with shared.md + projects/remote.md on the default branch.
+  // Build a non-empty remote with shared.md + repos/remote.md on the default branch.
   function buildPopulatedRemote(): void {
     mkdirSync(remoteDir, { recursive: true });
     execFileSync('git', ['init', '--bare', '-b', 'main'], { cwd: remoteDir });
@@ -286,19 +286,19 @@ describe('validateMemoryRepo', () => {
   });
 
   it('passes a clean repo', () => {
-    writeMemory(workDir, 'project.demo.a-fact');
+    writeMemory(workDir, 'repo.acme-demo.a-fact');
     const report = validateMemoryRepo(workDir);
     expect(report.ok).toBe(true);
     expect(report.checkedFiles).toBe(1);
   });
 
   it('skips project-profile.md identity documents', () => {
-    writeMemory(workDir, 'project.demo.a-fact');
+    writeMemory(workDir, 'repo.acme-demo.a-fact');
     const sub = join(workDir, 'projects', 'demo');
     mkdirSync(sub, { recursive: true });
-    // Identity profile written by bindProjectIdentity: type=project_profile, not a memory.
+    // Legacy project profiles are not valid memory records.
     writeFileSync(join(sub, 'project-profile.md'), [
-      '---', 'id: project.demo.profile', 'type: project_profile', 'project_id: demo',
+      '---', 'id: repo.acme-demo.profile', 'type: project_profile', 'repo_id: acme/demo',
       'repo_ids:', '  - acme/demo', 'domains:', '  - app', 'package_names:',
       '  - "@demo/app"', 'status: active', '---', '', '# demo', '',
     ].join('\n'), 'utf-8');
@@ -312,8 +312,8 @@ describe('validateMemoryRepo', () => {
     const sub = join(workDir, 'projects', 'demo');
     mkdirSync(sub, { recursive: true });
     writeFileSync(join(sub, 'leak.md'), [
-      '---', 'id: project.demo.leak', 'type: project_fact', 'scope: project',
-      'project_id: demo', 'title: Leak', 'status: active', 'visibility: team',
+      '---', 'id: repo.acme-demo.leak', 'type: repo_fact', 'scope: repo',
+      'repo_id: acme/demo', 'title: Leak', 'status: active', 'visibility: team',
       'confidence: 0.9', 'revision: 1', 'content_hash: sha256:x',
       'created_at: 2026-06-12T10:00:00+08:00', 'updated_at: 2026-06-12T10:00:00+08:00',
       '---', '', 'AKIAABCDEFGHIJKLMNOP', '',
@@ -336,11 +336,11 @@ describe('validateMemoryRepo', () => {
   });
 
   it('detects duplicate ids', () => {
-    writeMemory(workDir, 'project.demo.dup');
+    writeMemory(workDir, 'repo.acme-demo.dup');
     const sub = join(workDir, 'projects', 'demo');
     writeFileSync(join(sub, 'dup2.md'), [
-      '---', 'id: project.demo.dup', 'type: project_fact', 'scope: project',
-      'project_id: demo', 'title: Dup', 'status: active', 'visibility: team',
+      '---', 'id: repo.acme-demo.dup', 'type: repo_fact', 'scope: repo',
+      'repo_id: acme/demo', 'title: Dup', 'status: active', 'visibility: team',
       'confidence: 0.9', 'revision: 1', 'content_hash: sha256:x',
       'created_at: 2026-06-12T10:00:00+08:00', 'updated_at: 2026-06-12T10:00:00+08:00',
       '---', '', 'Duplicate id.', '',
@@ -350,7 +350,7 @@ describe('validateMemoryRepo', () => {
   });
 
   it('detects content hash mismatch', () => {
-    writeMemory(workDir, 'project.demo.hash-mismatch', 'sha256:abc123');
+    writeMemory(workDir, 'repo.acme-demo.hash-mismatch', 'sha256:abc123');
     const report = validateMemoryRepo(workDir);
     expect(report.issues.some((i) => i.problem.includes('content_hash mismatch'))).toBe(true);
   });
@@ -359,8 +359,8 @@ describe('validateMemoryRepo', () => {
     const sub = join(workDir, 'projects', 'demo');
     mkdirSync(sub, { recursive: true });
     writeFileSync(join(sub, 'expired.md'), [
-      '---', 'id: project.demo.expired', 'type: project_fact', 'scope: project',
-      'project_id: demo', 'title: Expired', 'status: active', 'visibility: team',
+      '---', 'id: repo.acme-demo.expired', 'type: repo_fact', 'scope: repo',
+      'repo_id: acme/demo', 'title: Expired', 'status: active', 'visibility: team',
       'confidence: 0.9', 'revision: 1', 'content_hash: sha256:x',
       'expires_at: 2020-01-01T00:00:00.000Z',
       'created_at: 2026-06-12T10:00:00+08:00', 'updated_at: 2026-06-12T10:00:00+08:00',
@@ -371,14 +371,14 @@ describe('validateMemoryRepo', () => {
   });
 
   it('detects PII and tombstone id reuse', () => {
-    writeMemory(workDir, 'project.demo.reused');
+    writeMemory(workDir, 'repo.acme-demo.reused');
     const tombstones = join(workDir, 'tombstones');
     mkdirSync(tombstones, { recursive: true });
-    writeFileSync(join(tombstones, 'project.demo.reused.md'), 'tombstone', 'utf-8');
+    writeFileSync(join(tombstones, 'repo.acme-demo.reused.md'), 'tombstone', 'utf-8');
     const piiFile = join(workDir, 'projects', 'demo', 'pii.md');
     writeFileSync(piiFile, [
-      '---', 'id: project.demo.pii', 'type: project_fact', 'scope: project',
-      'project_id: demo', 'title: PII', 'status: active', 'visibility: team',
+      '---', 'id: repo.acme-demo.pii', 'type: repo_fact', 'scope: repo',
+      'repo_id: acme/demo', 'title: PII', 'status: active', 'visibility: team',
       'confidence: 0.9', 'revision: 1', 'content_hash: sha256:x',
       'created_at: 2026-06-12T10:00:00+08:00', 'updated_at: 2026-06-12T10:00:00+08:00',
       '---', '', 'Contact me at person@example.com.', '',

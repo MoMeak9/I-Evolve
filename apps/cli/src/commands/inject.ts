@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { paths } from '@i-evolve/daemon';
 import {
   MarkdownMemoryRepository,
-  detectProjectIdentity,
+  detectRepoIdentity,
   retrieveContext,
   retrieveContextDebug,
   formatContextMarkdown,
@@ -24,10 +24,9 @@ export async function handleInject(flags: Record<string, unknown>): Promise<void
   // which the `pnpm -C` launcher pins to IEVOLVE_HOME and would otherwise misdetect
   // the repo as the I-Evolve checkout itself.
   const invocationCwd = process.env.IEVOLVE_INVOCATION_CWD ?? process.cwd();
-  const detected = detectProjectIdentity({ cwd: invocationCwd });
+  const detected = detectRepoIdentity({ cwd: invocationCwd });
   const ctx = {
     repoId: (flags['repo-id'] as string) ?? process.env.IEVOLVE_REPO_ID ?? detected.repoId,
-    projectId: (flags['project-id'] as string) ?? process.env.IEVOLVE_PROJECT_ID ?? detected.projectId,
     domain: (flags.domain as string) ?? process.env.IEVOLVE_DOMAIN ?? detected.domain,
     packageNames: detected.packageNames,
   };
@@ -44,7 +43,7 @@ export async function handleInject(flags: Record<string, unknown>): Promise<void
   try {
     const debug = retrieveContextDebug(repo, ctx);
     if (flags.debug) {
-      console.log(`Matched identity: repo=${ctx.repoId ?? 'unknown'}, project=${ctx.projectId ?? 'unknown'}`);
+      console.log(`Matched identity: repo=${ctx.repoId ?? 'unknown'}, domain=${ctx.domain ?? 'unknown'}`);
       console.log(`Candidates: ${debug.stats.candidates}`);
       console.log(`Filtered expired: ${debug.stats.filteredExpired}`);
       console.log(`Filtered scope mismatch: ${debug.stats.filteredScopeMismatch}`);

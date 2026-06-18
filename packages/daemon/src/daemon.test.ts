@@ -181,10 +181,10 @@ describe('Daemon memory API', () => {
       dbPath: join(paths.base, 'shared', 'index.db'),
     });
     repo.create({
-      id: 'project.demo.ssr-rule',
-      type: 'project_fact',
-      scope: 'project',
-      projectId: 'demo',
+      id: 'repo.acme-demo.ssr-rule',
+      type: 'repo_fact',
+      scope: 'repo',
+      repoId: 'acme/demo',
       title: 'SSR Rule',
       content: 'SSR hydration must be reviewed before release.',
       status: 'active',
@@ -210,7 +210,7 @@ describe('Daemon memory API', () => {
       payload: {
         query: 'SSR hydration',
         cwd: testDir,
-        projectId: 'demo',
+        repoId: 'acme/demo',
         maxTokens: 2000,
       },
     } as any);
@@ -218,8 +218,8 @@ describe('Daemon memory API', () => {
     expect(resp.ok).toBe(true);
     expect(resp.data?.context).toContain('# I-Evolve Context');
     expect(resp.data?.context).toContain('SSR hydration must be reviewed');
-    expect(resp.data?.memories[0].id).toBe('project.demo.ssr-rule');
-    expect(resp.data?.memories[0].reason).toContain('project');
+    expect(resp.data?.memories[0].id).toBe('repo.acme-demo.ssr-rule');
+    expect(resp.data?.memories[0].reason).toContain('repo');
   });
 
   it('searches active memory through daemon IPC using FTS', async () => {
@@ -230,8 +230,8 @@ describe('Daemon memory API', () => {
 
     expect(resp.ok).toBe(true);
     expect(resp.data?.[0]).toMatchObject({
-      id: 'project.demo.ssr-rule',
-      scope: 'project',
+      id: 'repo.acme-demo.ssr-rule',
+      scope: 'repo',
       confidence: 0.91,
     });
   });
@@ -242,11 +242,11 @@ describe('Daemon memory API', () => {
       payload: {
         content: 'Always run release smoke tests for dashboard changes.',
         cwd: testDir,
-        projectId: 'demo',
+        repoId: 'acme/demo',
       },
     } as any);
     expect(remembered.ok).toBe(true);
-    expect(remembered.data?.memoryId).toMatch(/^project\.demo\./);
+    expect(remembered.data?.memoryId).toMatch(/^(repo|domain)\./);
 
     const forgotten = await sendRequest<{ auditId: string }>({
       type: 'memory.forget',
@@ -272,7 +272,7 @@ describe('Daemon memory API', () => {
       type: 'audit.append',
       payload: {
         id: 'audit-demo-001',
-        memoryId: 'project.demo.ssr-rule',
+        memoryId: 'repo.acme-demo.ssr-rule',
         action: 'activate',
         actorType: 'system',
         actorId: 'daemon-test',
@@ -286,14 +286,14 @@ describe('Daemon memory API', () => {
 
     const audit = await sendRequest<unknown[]>({
       type: 'memory.audit',
-      payload: { memoryId: 'project.demo.ssr-rule' },
+      payload: { memoryId: 'repo.acme-demo.ssr-rule' },
     } as any);
     expect(audit.ok).toBe(true);
     expect(audit.data).toHaveLength(1);
 
     const explanation = await sendRequest<{ explanation: string }>({
       type: 'memory.explain',
-      payload: { memoryId: 'project.demo.ssr-rule' },
+      payload: { memoryId: 'repo.acme-demo.ssr-rule' },
     } as any);
     expect(explanation.data?.explanation).toContain('seeded for test');
 

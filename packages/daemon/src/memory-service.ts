@@ -5,7 +5,7 @@ import { containsPii, containsSecret } from '@i-evolve/ai-evolution';
 import { GitMemorySync } from '@i-evolve/git-sync';
 import {
   MarkdownMemoryRepository,
-  detectProjectIdentity,
+  detectRepoIdentity,
   formatContextMarkdown,
   retrieveContextDebug,
 } from '@i-evolve/storage';
@@ -36,14 +36,12 @@ export class DaemonMemoryService {
   recall(input: MemoryRecallInput): { context: string; memories: MemoryRef[]; conflicts: unknown[]; stats: unknown } {
     const repo = this.openRepo();
     try {
-      const identity = detectProjectIdentity({
+      const identity = detectRepoIdentity({
         cwd: input.cwd,
-        manualProjectId: input.projectId,
         manualDomain: input.domain,
       });
       const debug = retrieveContextDebug(repo, {
         repoId: input.repoId ?? identity.repoId,
-        projectId: input.projectId ?? identity.projectId,
         domain: input.domain ?? identity.domain,
         packageNames: identity.packageNames,
         path: input.cwd,
@@ -52,7 +50,6 @@ export class DaemonMemoryService {
       return {
         context: formatContextMarkdown({
           repoId: input.repoId ?? identity.repoId,
-          projectId: input.projectId ?? identity.projectId,
           domain: input.domain ?? identity.domain,
           packageNames: identity.packageNames,
           path: input.cwd,
@@ -90,23 +87,20 @@ export class DaemonMemoryService {
     this.assertSafeContent(input.content);
     const repo = this.openRepo();
     try {
-      const identity = detectProjectIdentity({
+      const identity = detectRepoIdentity({
         cwd: input.cwd ?? process.cwd(),
-        manualProjectId: input.projectId,
         manualDomain: input.domain,
       });
-      const scope = input.scope ?? (input.projectId || identity.projectId ? 'project' : 'repo');
-      const projectId = input.projectId ?? identity.projectId;
+      const scope = input.scope ?? (input.domain ?? identity.domain ? 'domain' : 'repo');
       const repoId = input.repoId ?? identity.repoId;
       const title = input.title ?? firstSentence(input.content);
-      const id = buildMemoryId(scope, projectId, repoId, title);
+      const id = buildMemoryId(scope, repoId, input.domain ?? identity.domain, title);
       const memory = repo.create({
         id,
-        type: input.type ?? 'project_fact',
+        type: input.type ?? 'repo_fact',
         scope,
         repoId: scope === 'repo' ? repoId : undefined,
-        projectId: scope === 'project' ? projectId : undefined,
-        domain: input.domain ?? identity.domain,
+        domain: scope === 'domain' ? input.domain ?? identity.domain : undefined,
         title,
         content: input.content,
         status: 'active',
@@ -300,9 +294,7 @@ export class DaemonMemoryService {
 function flattenRetrieved(retrieved: ReturnType<typeof retrieveContextDebug>['retrieved']): MemoryItem[] {
   return [
     ...retrieved.repo,
-    ...retrieved.project,
     ...retrieved.domain,
-    ...retrieved.user,
     ...retrieved.global,
     ...retrieved.warnings,
     ...('recent' in retrieved ? (retrieved as any).recent : []),
@@ -314,11 +306,11 @@ function firstSentence(content: string): string {
   return trimmed.replace(/[.。]+$/, '').slice(0, 80) || 'Remembered Memory';
 }
 
-function buildMemoryId(scope: MemoryItem['scope'], projectId: string | undefined, repoId: string | undefined, title: string): string {
-  const namespace = scope === 'project'
-    ? projectId ?? 'unknown'
-    : scope === 'repo'
-      ? (repoId ?? 'unknown').replace(/\//g, '-')
+function buildMemoryId(scope: MemoryItem['scope'], repoId: string | undefined, domain: string | undefined, title: string): string {
+  const namespace = scope === 'repo'
+    ? (repoId ?? 'unknown').replace(/\//g, '-')
+    : scope === 'domain'
+      ? domain ?? 'unknown'
       : 'shared';
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'memory';
   return `${scope}.${namespace}.${slug}`;

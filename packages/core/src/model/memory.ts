@@ -5,7 +5,6 @@ export interface MemoryItem {
   type: MemoryType;
   scope: MemoryScope;
   repoId?: string;
-  projectId?: string;
   domain?: string;
   title: string;
   content: string;

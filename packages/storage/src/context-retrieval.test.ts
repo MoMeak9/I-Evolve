@@ -23,7 +23,7 @@ afterEach(() => {
 
 function seed() {
   repo.create({
-    id: 'project.demo.fact-one', type: 'project_fact', scope: 'project', projectId: 'demo',
+    id: 'repo.acme-demo.fact-one', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
     title: 'Project Fact One', content: 'A project fact.', status: 'active', visibility: 'team',
     confidence: 0.9, ttlDays: 365, tags: [], sourceRefs: [],
   });
@@ -33,7 +33,7 @@ function seed() {
     confidence: 0.88, ttlDays: 180, tags: [], sourceRefs: [],
   });
   repo.create({
-    id: 'project.demo.pitfall-one', type: 'pitfall', scope: 'project', projectId: 'demo',
+    id: 'repo.acme-demo.pitfall-one', type: 'pitfall', scope: 'repo', repoId: 'acme/demo',
     title: 'Known Pitfall', content: 'Watch out for X.', status: 'active', visibility: 'team',
     confidence: 0.8, ttlDays: 90, tags: [], sourceRefs: [],
   });
@@ -42,47 +42,45 @@ function seed() {
 describe('retrieveContext', () => {
   it('returns active memories matching scope', () => {
     seed();
-    const result = retrieveContext(repo, { projectId: 'demo' });
-    expect(result.project).toHaveLength(1);
+    const result = retrieveContext(repo, { repoId: 'acme/demo' });
+    expect(result.repo).toHaveLength(1);
     expect(result.global).toHaveLength(1);
     expect(result.warnings).toHaveLength(1);
   });
 
   it('excludes deprecated memories', () => {
     seed();
-    repo.forget('project.demo.fact-one', 'soft');
-    const result = retrieveContext(repo, { projectId: 'demo' });
-    expect(result.project).toHaveLength(0);
+    repo.forget('repo.acme-demo.fact-one', 'soft');
+    const result = retrieveContext(repo, { repoId: 'acme/demo' });
+    expect(result.repo).toHaveLength(0);
   });
 
   it('excludes memories with non-matching scope', () => {
     seed();
-    const result = retrieveContext(repo, { projectId: 'other-project' });
-    expect(result.project).toHaveLength(0);
+    const result = retrieveContext(repo, { repoId: 'other/repo' });
+    expect(result.repo).toHaveLength(0);
     // global still applies
     expect(result.global).toHaveLength(1);
   });
 
   it('excludes expired memories', () => {
     repo.create({
-      id: 'project.demo.expired', type: 'project_fact', scope: 'project', projectId: 'demo',
+      id: 'repo.acme-demo.expired', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
       title: 'Expired', content: 'Old.', status: 'active', visibility: 'team',
       confidence: 0.9, ttlDays: 1, expiresAt: '2020-01-01T00:00:00.000Z', tags: [], sourceRefs: [],
     });
-    const result = retrieveContext(repo, { projectId: 'demo', now: '2026-06-12T00:00:00.000Z' });
-    expect(result.project).toHaveLength(0);
+    const result = retrieveContext(repo, { repoId: 'acme/demo', now: '2026-06-12T00:00:00.000Z' });
+    expect(result.repo).toHaveLength(0);
   });
 
   it('formats context as markdown', () => {
     seed();
-    const result = retrieveContext(repo, { repoId: 'r', projectId: 'demo', domain: 'web' });
-    const md = formatContextMarkdown({ repoId: 'r', projectId: 'demo', domain: 'web' }, result);
+    const result = retrieveContext(repo, { repoId: 'r', domain: 'web' });
+    const md = formatContextMarkdown({ repoId: 'r', domain: 'web' }, result);
     expect(md).toContain('# I-Evolve Context');
-    expect(md).toContain('project_id: demo');
-    expect(md).toContain('id=project.demo.fact-one');
-    expect(md).toContain('A project fact.');
+    expect(md).toContain('repo_id: r');
+    expect(md).toContain('id=global.read-before-edit');
     expect(md).toContain('Active Instincts');
-    expect(md).toContain('Warnings');
   });
 
   it('allows repo memory to cross repos only through applies_to', () => {
@@ -105,27 +103,27 @@ describe('retrieveContext', () => {
 
   it('suppresses lower-priority conflicts with the same topic', () => {
     repo.create({
-      id: 'repo.demo.read-before-edit', type: 'workflow_rule', scope: 'repo', repoId: 'acme/editor',
+      id: 'repo.acme-editor.read-before-edit', type: 'workflow_rule', scope: 'repo', repoId: 'acme/editor',
       title: 'Read Before Edit', content: 'Repo specific read rule.', status: 'active', visibility: 'team',
       confidence: 0.9, ttlDays: 90, tags: ['read-before-edit'], sourceRefs: [],
     });
     repo.create({
-      id: 'project.demo.read-before-edit', type: 'workflow_rule', scope: 'project', projectId: 'demo',
+      id: 'repo.demo.read-before-edit-high', type: 'workflow_rule', scope: 'repo', repoId: 'acme/editor',
       title: 'Read Before Edit', content: 'Project read rule.', status: 'active', visibility: 'team',
       confidence: 0.99, ttlDays: 90, tags: ['read-before-edit'], sourceRefs: [],
     });
 
-    const debug = retrieveContextDebug(repo, { repoId: 'acme/editor', projectId: 'demo' });
-    expect(debug.retrieved.repo.map((m) => m.id)).toEqual(['repo.demo.read-before-edit']);
-    expect(debug.retrieved.project.map((m) => m.id)).not.toContain('project.demo.read-before-edit');
-    expect(debug.conflicts[0].selectedMemoryId).toBe('repo.demo.read-before-edit');
-    expect(debug.conflicts[0].suppressedMemoryIds).toContain('project.demo.read-before-edit');
+    const debug = retrieveContextDebug(repo, { repoId: 'acme/editor' });
+    expect(debug.retrieved.repo.map((m) => m.id)).toEqual(['repo.demo.read-before-edit-high']);
+    expect(debug.retrieved.repo.map((m) => m.id)).not.toContain('repo.acme-editor.read-before-edit');
+    expect(debug.conflicts[0].selectedMemoryId).toBe('repo.demo.read-before-edit-high');
+    expect(debug.conflicts[0].suppressedMemoryIds).toContain('repo.acme-editor.read-before-edit');
   });
 
   it('returns debug filter counters', () => {
     seed();
-    repo.forget('project.demo.fact-one', 'soft');
-    const debug = retrieveContextDebug(repo, { projectId: 'other-project' });
+    repo.forget('repo.acme-demo.fact-one', 'soft');
+    const debug = retrieveContextDebug(repo, { repoId: 'other/repo' });
     expect(debug.stats.candidates).toBeGreaterThan(0);
     expect(debug.stats.filteredDeprecated).toBeGreaterThanOrEqual(1);
     expect(debug.stats.filteredScopeMismatch).toBeGreaterThanOrEqual(1);
@@ -134,32 +132,32 @@ describe('retrieveContext', () => {
 
   it('uses FTS query score to order matches within a scope', () => {
     repo.create({
-      id: 'project.demo.react-low', type: 'project_fact', scope: 'project', projectId: 'demo',
+      id: 'repo.acme-demo.react-low', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
       title: 'Generic UI', content: 'React appears once.', status: 'active', visibility: 'team',
       confidence: 0.6, ttlDays: 90, tags: [], sourceRefs: [],
     });
     repo.create({
-      id: 'project.demo.react-high', type: 'project_fact', scope: 'project', projectId: 'demo',
+      id: 'repo.acme-demo.react-high', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
       title: 'React React Hydration', content: 'React hydration React SSR React.', status: 'active', visibility: 'team',
       confidence: 0.6, ttlDays: 90, tags: [], sourceRefs: [],
     });
 
-    const result = retrieveContext(repo, { projectId: 'demo', query: 'React hydration' });
-    expect(result.project.map((m) => m.id)[0]).toBe('project.demo.react-high');
+    const result = retrieveContext(repo, { repoId: 'acme/demo', query: 'React hydration' });
+    expect(result.repo.map((m) => m.id)[0]).toBe('repo.acme-demo.react-high');
   });
 
   it('keeps recent session summaries as a Top 2 bucket', () => {
     for (let i = 1; i <= 3; i++) {
       repo.create({
-        id: `project.demo.session-${i}`, type: 'project_fact', scope: 'project', projectId: 'demo',
+        id: `repo.acme-demo.session-${i}`, type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
         title: `Session ${i}`, content: `Recent session summary ${i}.`, status: 'active', visibility: 'team',
         confidence: 0.7 + i / 100, ttlDays: 7, tags: ['session-summary'], sourceRefs: [`session-summary.${i}`],
       });
     }
 
-    const result = retrieveContext(repo, { projectId: 'demo' });
-    expect(result.recent.map((m) => m.id)).toEqual(['project.demo.session-3', 'project.demo.session-2']);
-    expect(formatContextMarkdown({ projectId: 'demo' }, result)).toContain('Recent Session Summaries');
+    const result = retrieveContext(repo, { repoId: 'acme/demo' });
+    expect(result.recent.map((m) => m.id)).toEqual(['repo.acme-demo.session-3', 'repo.acme-demo.session-2']);
+    expect(formatContextMarkdown({ repoId: 'acme/demo' }, result)).toContain('Recent Session Summaries');
   });
 
   it('matches double-star path globs across directories', () => {
@@ -176,20 +174,20 @@ describe('retrieveContext', () => {
 
   it('does not suppress unrelated memories that only share a generic tag', () => {
     repo.create({
-      id: 'project.demo.react-api', type: 'project_fact', scope: 'project', projectId: 'demo',
+      id: 'repo.acme-demo.react-api', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
       title: 'React API', content: 'Use API pattern.', status: 'active', visibility: 'team',
       confidence: 0.9, ttlDays: 90, tags: ['react'], sourceRefs: [],
     });
     repo.create({
-      id: 'project.demo.react-build', type: 'project_fact', scope: 'project', projectId: 'demo',
+      id: 'repo.acme-demo.react-build', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
       title: 'React Build', content: 'Use build pattern.', status: 'active', visibility: 'team',
       confidence: 0.8, ttlDays: 90, tags: ['react'], sourceRefs: [],
     });
 
-    const result = retrieveContextDebug(repo, { projectId: 'demo' });
-    expect(result.retrieved.project.map((m) => m.id)).toEqual([
-      'project.demo.react-api',
-      'project.demo.react-build',
+    const result = retrieveContextDebug(repo, { repoId: 'acme/demo' });
+    expect(result.retrieved.repo.map((m) => m.id)).toEqual([
+      'repo.acme-demo.react-api',
+      'repo.acme-demo.react-build',
     ]);
     expect(result.conflicts).toHaveLength(0);
   });

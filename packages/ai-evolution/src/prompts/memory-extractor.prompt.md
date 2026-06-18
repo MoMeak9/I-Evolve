@@ -4,7 +4,7 @@ extract durable memory candidates.
 Return ONLY a JSON array of candidates with this shape:
 [{
   "title": string,
-  "type": "user_preference" | "project_fact" | "repo_fact" | "task_constraint" | "decision" | "pitfall" | "workflow_rule",
+  "type": "repo_fact" | "task_constraint" | "decision" | "pitfall" | "workflow_rule",
   "proposedScope": "global" | "domain" | "project" | "repo" | "task" | "user",
   "content": string,
   "evidence": string[],

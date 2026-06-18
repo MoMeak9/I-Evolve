@@ -9,7 +9,7 @@ describe('dashboard', () => {
 
     await renderDashboard(root, client);
 
-    expect(root.textContent).toContain('project.demo.fact');
+    expect(root.textContent).toContain('repo.acme-demo.fact');
     expect(root.textContent).toContain('activate');
     expect(root.textContent).toContain('conflict.demo');
     expect(root.textContent).toContain('running');
@@ -32,8 +32,8 @@ describe('dashboard', () => {
     click(root, '[data-action="rollback"]');
 
     expect(calls).toEqual([
-      'forget:project.demo.fact:soft',
-      'deprecate:project.demo.fact',
+      'forget:repo.acme-demo.fact:soft',
+      'deprecate:repo.acme-demo.fact',
       'rollback:abc123',
     ]);
   });
@@ -73,7 +73,7 @@ function click(root: HTMLElement, selector: string): void {
       closest: () => ({
         getAttribute: (name: string) => {
           if (name === 'data-action') return action;
-          if (name === 'data-memory-id') return action === 'rollback' ? null : 'project.demo.fact';
+          if (name === 'data-memory-id') return action === 'rollback' ? null : 'repo.acme-demo.fact';
           if (name === 'data-commit') return action === 'rollback' ? 'abc123' : null;
           return null;
         },
@@ -86,17 +86,17 @@ function makeClient(overrides: Partial<DashboardDaemonClient> = {}): DashboardDa
   return {
     health: async () => ({ status: 'running' }),
     memories: async () => [{
-      id: 'project.demo.fact',
+      id: 'repo.acme-demo.fact',
       title: 'Demo Fact',
-      scope: 'project',
+      scope: 'repo',
       status: 'active',
       confidence: 0.9,
       revision: 1,
       expiresAt: null,
       content: 'Demo memory content',
     }],
-    audit: async () => [{ id: 'audit.1', memoryId: 'project.demo.fact', action: 'activate', reason: 'approved' }],
-    conflicts: async () => [{ id: 'conflict.demo', selectedMemoryId: 'project.demo.fact', suppressedMemoryIds: [] }],
+    audit: async () => [{ id: 'audit.1', memoryId: 'repo.acme-demo.fact', action: 'activate', reason: 'approved' }],
+    conflicts: async () => [{ id: 'conflict.demo', selectedMemoryId: 'repo.acme-demo.fact', suppressedMemoryIds: [] }],
     gitStatus: async () => ({ initialized: true, branch: 'main', commit: 'abc123', clean: true }),
     forget: async () => ({}),
     deprecate: async () => ({}),

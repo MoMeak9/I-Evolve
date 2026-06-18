@@ -4,7 +4,6 @@ export interface SessionSummary {
   id: string;
   sessionId: string;
   repoId?: string;
-  projectId?: string;
   startedAt?: string;
   endedAt: string;
   summary: string;

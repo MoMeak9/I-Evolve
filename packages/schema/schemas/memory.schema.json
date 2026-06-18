@@ -9,14 +9,13 @@
     "id": { "type": "string", "minLength": 1 },
     "type": {
       "type": "string",
-      "enum": ["user_preference", "project_fact", "repo_fact", "task_constraint", "decision", "pitfall", "workflow_rule"]
+      "enum": ["repo_fact", "task_constraint", "decision", "pitfall", "workflow_rule"]
     },
     "scope": {
       "type": "string",
-      "enum": ["global", "domain", "project", "repo", "task", "user"]
+      "enum": ["global", "domain", "repo", "task"]
     },
     "repo_id": { "type": "string" },
-    "project_id": { "type": "string" },
     "domain": { "type": "string" },
     "title": { "type": "string", "minLength": 1 },
     "status": {
@@ -52,10 +51,6 @@
   },
   "additionalProperties": false,
   "allOf": [
-    {
-      "if": { "properties": { "scope": { "const": "project" } } },
-      "then": { "required": ["project_id"] }
-    },
     {
       "if": { "properties": { "scope": { "const": "repo" } } },
       "then": { "required": ["repo_id"] }

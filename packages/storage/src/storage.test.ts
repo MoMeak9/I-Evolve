@@ -24,9 +24,9 @@ afterEach(() => {
 function makeInput() {
   return {
     id: 'project.test.sample-memory',
-    type: 'project_fact' as const,
-    scope: 'project' as const,
-    projectId: 'test',
+    type: 'repo_fact' as const,
+    scope: 'repo' as const,
+    repoId: 'acme/test',
     title: 'Sample Memory',
     content: 'This is a test memory content.',
     status: 'active' as const,
@@ -162,9 +162,9 @@ describe('MarkdownMemoryRepository', () => {
     writeFileSync(join(badDir, 'bad.md'), [
       '---',
       'id: project.bad.invalid',
-      'type: project_fact',
-      'scope: project',
-      'project_id: bad',
+      'type: repo_fact',
+      'scope: repo',
+      'repo_id: bad',
       'title: Invalid',
       'status: active',
       'visibility: team',

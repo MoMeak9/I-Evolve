@@ -68,7 +68,6 @@ export async function handleSessionCommand(
   const summary = await summarizer.summarize({
     sessionId,
     repoId: observations[0]?.repoId,
-    projectId: observations[0]?.projectId,
     observations,
     endedAt: new Date().toISOString(),
   });
@@ -90,7 +89,7 @@ export async function handleSessionCommand(
           content: input.content, status: 'active', visibility: input.visibility,
           confidence: input.confidence, ttlDays: input.ttlDays, expiresAt: input.expiresAt,
           tags: input.tags, sourceRefs: input.sourceRefs, repoId: input.repoId,
-          projectId: input.projectId, domain: input.domain,
+          domain: input.domain,
         } as any),
       appendAudit,
     });

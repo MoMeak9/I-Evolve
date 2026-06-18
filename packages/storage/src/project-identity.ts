@@ -1,11 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { parseMemoryMarkdown } from './markdown-reader.js';
 
-export interface ProjectIdentity {
+export interface RepoIdentity {
   repoId: string;
-  projectId?: string;
   domain?: string;
   gitRemote?: string;
   packageNames: string[];
@@ -13,31 +11,15 @@ export interface ProjectIdentity {
   confidence: number;
 }
 
-export interface ProjectProfileDocument {
-  id: string;
-  projectId: string;
-  repoIds: string[];
-  domains: string[];
-  packageNames: string[];
-  status: string;
-}
-
-export interface DetectProjectIdentityInput {
+export interface DetectRepoIdentityInput {
   cwd: string;
   gitRemote?: string;
   packageNames?: string[];
-  profiles?: ProjectProfileDocument[];
-  manualProjectId?: string;
   manualDomain?: string;
 }
 
-export interface BindProjectIdentityInput {
-  memoryDir: string;
-  projectId: string;
-  repoId: string;
-  domain?: string;
-  packageNames?: string[];
-}
+export type ProjectIdentity = RepoIdentity;
+export type DetectProjectIdentityInput = DetectRepoIdentityInput;
 
 export function normalizeGitRemoteUrl(remote: string | undefined): string | undefined {
   if (!remote) return undefined;
@@ -49,34 +31,20 @@ export function normalizeGitRemoteUrl(remote: string | undefined): string | unde
   return trimmed.replace(/\.git$/, '');
 }
 
-export function readProjectProfile(markdown: string): ProjectProfileDocument {
-  const { frontmatter } = parseMemoryMarkdown(markdown);
-  return {
-    id: String(frontmatter.id ?? ''),
-    projectId: String(frontmatter.project_id ?? ''),
-    repoIds: asStringArray(frontmatter.repo_ids),
-    domains: asStringArray(frontmatter.domains),
-    packageNames: asStringArray(frontmatter.package_names),
-    status: String(frontmatter.status ?? 'active'),
-  };
-}
-
-export function detectProjectIdentity(input: DetectProjectIdentityInput): ProjectIdentity {
+export function detectRepoIdentity(input: DetectRepoIdentityInput): RepoIdentity {
   const rootPath = detectGitRoot(input.cwd) ?? resolve(input.cwd);
   const gitRemote = input.gitRemote ?? detectGitRemote(rootPath);
   const repoId = normalizeGitRemoteUrl(gitRemote) ?? basenameRepo(rootPath);
   const packageNames = dedupe([...(input.packageNames ?? []), ...detectPackageNames(rootPath)]);
-  const profile = findMatchingProfile(input.profiles ?? [], repoId, packageNames);
 
   let confidence = 0.45;
   if (gitRemote) confidence += 0.3;
   if (packageNames.length > 0) confidence += 0.1;
-  if (profile) confidence += 0.15;
+  if (input.manualDomain) confidence += 0.05;
 
   return {
     repoId,
-    projectId: input.manualProjectId ?? profile?.projectId,
-    domain: input.manualDomain ?? profile?.domains[0],
+    domain: input.manualDomain ?? inferDomain(repoId, packageNames),
     gitRemote,
     packageNames,
     rootPath,
@@ -84,15 +52,8 @@ export function detectProjectIdentity(input: DetectProjectIdentityInput): Projec
   };
 }
 
-function findMatchingProfile(
-  profiles: ProjectProfileDocument[],
-  repoId: string,
-  packageNames: string[],
-): ProjectProfileDocument | undefined {
-  return profiles.find((p) =>
-    p.status === 'active' &&
-    (p.repoIds.includes(repoId) || p.packageNames.some((pkg) => packageNames.includes(pkg))));
-}
+/** @deprecated Use detectRepoIdentity; project identity no longer persists memory records. */
+export const detectProjectIdentity = detectRepoIdentity;
 
 function detectGitRoot(cwd: string): string | undefined {
   try {
@@ -146,33 +107,6 @@ function detectPackageNames(rootPath: string): string[] {
   return dedupe(names);
 }
 
-export function bindProjectIdentity(input: BindProjectIdentityInput): string {
-  const dir = join(input.memoryDir, 'projects', input.projectId);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  const profilePath = join(dir, 'project-profile.md');
-  const domains = input.domain ? [input.domain] : [];
-  const packageNames = input.packageNames ?? [];
-  const markdown = [
-    '---',
-    `id: project.${input.projectId}.profile`,
-    'type: project_profile',
-    `project_id: ${input.projectId}`,
-    'repo_ids:',
-    `  - ${input.repoId}`,
-    'domains:',
-    ...domains.map((domain) => `  - ${domain}`),
-    'package_names:',
-    ...packageNames.map((pkg) => `  - "${pkg}"`),
-    'status: active',
-    '---',
-    '',
-    `# ${input.projectId}`,
-    '',
-  ].join('\n');
-  writeFileSync(profilePath, markdown, 'utf-8');
-  return profilePath;
-}
-
 function detectPnpmWorkspacePackageNames(rootPath: string): string[] {
   const workspace = join(rootPath, 'pnpm-workspace.yaml');
   if (!existsSync(workspace)) return [];
@@ -200,12 +134,14 @@ function detectPnpmWorkspacePackageNames(rootPath: string): string[] {
   return names;
 }
 
-function basenameRepo(rootPath: string): string {
-  return rootPath.split('/').filter(Boolean).slice(-1)[0] ?? 'unknown';
+function inferDomain(repoId: string, packageNames: string[]): string | undefined {
+  const first = packageNames[0] ?? repoId;
+  const parts = first.split(/[\/.-]/).filter(Boolean);
+  return parts.length > 1 ? parts[0].replace(/^@/, '') : undefined;
 }
 
-function asStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(String) : [];
+function basenameRepo(rootPath: string): string {
+  return rootPath.split('/').filter(Boolean).slice(-1)[0] ?? 'unknown';
 }
 
 function dedupe(values: string[]): string[] {
