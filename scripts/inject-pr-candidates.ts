@@ -74,22 +74,28 @@ function appendAudit(action: AuditAction): void {
 const TTL_DAYS = 180;
 
 /**
- * Stable id for a candidate. Mirrors the packaged defaultId, but when a title
- * is non-ASCII (e.g. Chinese) its ASCII slug is empty — the packaged version
- * then yields `repo.<repoId>.` for EVERY such candidate, so they collide onto
- * one file and silently overwrite each other. Here we fall back to the first
- * git sha in sourceRefs plus a short title hash, guaranteeing uniqueness.
+ * Stable id for a candidate. Mirrors the packaged defaultId, but guards two
+ * collision modes the packaged version silently loses data on:
+ *   1. Non-ASCII title (e.g. pure Chinese) -> empty ASCII slug -> every such
+ *      candidate becomes `repo.<repoId>.` and overwrites onto one file.
+ *   2. Distinct titles sharing the same ASCII slug (e.g. two titles whose only
+ *      latin run is "ACL") -> same id -> the later one overwrites the earlier.
+ * For (1) we fall back to a sha+title-hash slug; for (2) we disambiguate any
+ * id already seen this run by appending that same sha+hash suffix.
  */
+const seenIds = new Set<string>();
 function idForCandidate(c: CandidateMemory, scope: MemoryScope): string {
   const ns = (c.repoId ?? 'unknown').replace(/\//g, '-');
+  const sha = (c.sourceRefs ?? []).find((r) => /^[0-9a-f]{7,40}$/.test(r))?.slice(0, 7) ?? 'x';
+  let h = 0;
+  for (const ch of c.title ?? '') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const suffix = `${sha}-${h.toString(36)}`;
   let slug = (c.title ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  if (!slug) {
-    const sha = (c.sourceRefs ?? []).find((r) => /^[0-9a-f]{7,40}$/.test(r))?.slice(0, 7) ?? 'x';
-    let h = 0;
-    for (const ch of c.title ?? '') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-    slug = `${sha}-${h.toString(36)}`;
-  }
-  return `${scope}.${ns}.${slug}`;
+  if (!slug) slug = suffix;
+  let id = `${scope}.${ns}.${slug}`;
+  if (seenIds.has(id)) id = `${scope}.${ns}.${slug}-${suffix}`;
+  seenIds.add(id);
+  return id;
 }
 
 
