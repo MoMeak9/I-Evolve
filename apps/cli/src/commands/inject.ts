@@ -15,6 +15,22 @@ function getRepo(): MarkdownMemoryRepository {
   });
 }
 
+// Emit the context markdown. With --hook, wrap it in the Claude Code SessionStart
+// envelope so the output is folded into the model's context; otherwise print raw
+// markdown for human/manual use.
+function emitContext(md: string, hook: boolean): void {
+  if (hook) {
+    console.log(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext: md,
+      },
+    }));
+  } else {
+    console.log(md);
+  }
+}
+
 export async function handleInject(flags: Record<string, unknown>): Promise<void> {
   // Auto-start the daemon so SessionStart context is available on first run.
   const { ensureDaemon } = await import('./ensure-daemon.js');
@@ -31,12 +47,14 @@ export async function handleInject(flags: Record<string, unknown>): Promise<void
     packageNames: detected.packageNames,
   };
 
+  const hook = Boolean(flags.hook);
+
   let repo: MarkdownMemoryRepository;
   try {
     repo = getRepo();
   } catch {
     // Fail-soft: empty context per MVP4 failure strategy.
-    console.log('# I-Evolve Context\n\n(no memories available)');
+    emitContext('# I-Evolve Context\n\n(no memories available)', hook);
     return;
   }
 
@@ -54,9 +72,9 @@ export async function handleInject(flags: Record<string, unknown>): Promise<void
     }
     const retrieved = flags.debug ? debug.retrieved : retrieveContext(repo, ctx);
     const md = formatContextMarkdown(ctx, retrieved);
-    console.log(md);
+    emitContext(md, hook);
   } catch {
-    console.log('# I-Evolve Context\n\n(retrieval failed)');
+    emitContext('# I-Evolve Context\n\n(retrieval failed)', hook);
   } finally {
     repo.close();
   }

@@ -31,6 +31,7 @@ const { positionals, values } = parseArgs({
     to: { type: 'string' },
     'dry-run': { type: 'boolean' },
     debug: { type: 'boolean' },
+    hook: { type: 'boolean' },
     cwd: { type: 'string' },
     project: { type: 'string' },
     memory: { type: 'string' },
