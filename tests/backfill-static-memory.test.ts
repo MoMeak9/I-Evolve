@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { listTrackedFiles } from '../scripts/backfill-static-memory.ts';
+import { listTrackedFiles, summarizeDocs } from '../scripts/backfill-static-memory.ts';
 
 function tmpGitRepo(): string {
   const dir = join('/tmp', `ie-static-${randomBytes(4).toString('hex')}`);
@@ -24,6 +24,27 @@ describe('listTrackedFiles', () => {
       expect(files).toContain('a.ts');
       expect(files).toContain('.gitignore');
       expect(files).not.toContain('ignored.txt');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('summarizeDocs', () => {
+  it('extracts README headings/excerpt and CHANGELOG versions', () => {
+    const dir = join('/tmp', `ie-docs-${randomBytes(4).toString('hex')}`);
+    mkdirSync(dir, { recursive: true });
+    try {
+      writeFileSync(join(dir, 'README.md'),
+        '# Title\nintro line\n## Architecture\nmore\n');
+      writeFileSync(join(dir, 'CHANGELOG.md'),
+        '## [1.2.0]\n### Added\n- x\n## [1.1.0]\n- y\n');
+      const docs = summarizeDocs(dir, ['README.md', 'CHANGELOG.md']);
+      const readme = docs.find((d) => d.kind === 'readme')!;
+      expect(readme.headings).toContain('Architecture');
+      expect(readme.excerpt).toContain('intro line');
+      const cl = docs.find((d) => d.kind === 'changelog')!;
+      expect(cl.versions).toEqual(['1.2.0', '1.1.0']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -8,6 +8,8 @@
  * 不 commit、不 push。详见 docs/superpowers/specs/2026-06-18-static-memory-backfill-design.md
  */
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // ---- pack 区（Task 3-5 填充）----
@@ -20,6 +22,46 @@ export function listTrackedFiles(repo: string): string[] {
     { cwd: repo, encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 },
   );
   return out.split('\n').map((l) => l.trim()).filter(Boolean);
+}
+
+export interface DocSummary {
+  path: string;
+  kind: 'readme' | 'changelog';
+  headings?: string[];
+  excerpt?: string;
+  versions?: string[];
+}
+
+const EXCERPT_LINES = 20;
+const VERSION_RE = /^##\s+\[?v?([0-9]+\.[0-9]+\.[0-9]+[^\]\s]*|Unreleased)\]?/i;
+
+export function summarizeDocs(repo: string, files: string[]): DocSummary[] {
+  const out: DocSummary[] = [];
+  for (const rel of files) {
+    const lower = basename(rel).toLowerCase();
+    const isReadme = lower === 'readme.md' || lower === 'readme';
+    const isChangelog = lower.startsWith('changelog');
+    if (!isReadme && !isChangelog) continue;
+    let raw: string;
+    try {
+      raw = readFileSync(join(repo, rel), 'utf-8');
+    } catch {
+      continue; // 单文件读失败：跳过
+    }
+    const lines = raw.split('\n');
+    if (isReadme) {
+      const headings = lines
+        .map((l) => l.match(/^#{1,3}\s+(.+)/)?.[1]?.trim())
+        .filter((h): h is string => Boolean(h));
+      out.push({ path: rel, kind: 'readme', headings, excerpt: lines.slice(0, EXCERPT_LINES).join('\n') });
+    } else {
+      const versions = lines
+        .map((l) => l.match(VERSION_RE)?.[1])
+        .filter((v): v is string => Boolean(v));
+      out.push({ path: rel, kind: 'changelog', versions });
+    }
+  }
+  return out;
 }
 // ---- inject 区（Task 6-7 填充）----
 
