@@ -8,11 +8,17 @@
  * 不 commit、不 push。详见 docs/superpowers/specs/2026-06-18-static-memory-backfill-design.md
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { detectRepoIdentity } from '@i-evolve/storage';
-import type { CandidateMemory } from '@i-evolve/core';
+import { paths } from '@i-evolve/daemon';
+import { MarkdownMemoryRepository, detectRepoIdentity } from '@i-evolve/storage';
+import {
+  EvolutionPipeline,
+  MockAiProvider,
+  type CreateMemoryFromDecisionInput,
+} from '@i-evolve/ai-evolution';
+import type { AuditAction, CandidateMemory, SessionSummary } from '@i-evolve/core';
 import type { MemoryScope, MemoryType } from '@i-evolve/shared';
 
 // ---- pack 区（Task 3-5 填充）----
@@ -306,12 +312,144 @@ function runPack(argv: string[]): void {
   }
 }
 
+function getRepo(): MarkdownMemoryRepository {
+  const memoryDir = paths.shared.memory;
+  const dbPath = join(paths.base, 'shared', 'index.db');
+  for (const d of [memoryDir, join(paths.base, 'shared')]) {
+    if (!existsSync(d)) mkdirSync(d, { recursive: true });
+  }
+  return new MarkdownMemoryRepository({ memoryDir, dbPath });
+}
+
+function appendAudit(action: AuditAction): void {
+  const dir = paths.audit.dir;
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const month = new Date(action.createdAt).toISOString().slice(0, 7);
+  appendFileSync(join(dir, `${month}.jsonl`), JSON.stringify(action) + '\n', 'utf-8');
+}
+
+const TTL_DAYS = 180;
+
+interface InjectArgs { repo: string; candidates: string; dryRun: boolean }
+
+function parseInjectArgs(argv: string[]): InjectArgs {
+  const a: InjectArgs = { repo: process.cwd(), candidates: '', dryRun: false };
+  for (let i = 1; i < argv.length; i++) {
+    const next = () => argv[++i];
+    switch (argv[i]) {
+      case '--repo': a.repo = next(); break;
+      case '--candidates': a.candidates = next(); break;
+      case '--dry-run': a.dryRun = true; break;
+    }
+  }
+  return a;
+}
+
+async function runInject(argv: string[]): Promise<void> {
+  const args = parseInjectArgs(argv);
+  if (!args.candidates || !existsSync(args.candidates)) {
+    console.error(`--candidates <file> required and must exist (got: ${args.candidates})`);
+    process.exit(1);
+  }
+  if (!existsSync(join(args.repo, '.git'))) {
+    console.error(`Not a git repo: ${args.repo}`);
+    process.exit(1);
+  }
+
+  const identity = detectRepoIdentity({ cwd: args.repo, manualDomain: undefined });
+  const repoId = identity.repoId;
+  const snapshotMarker = `${repoId}@static:${headSha(args.repo).slice(0, 7) || 'nohead'}`;
+  console.log(`repo:        ${repoId}`);
+  console.log(`marker:      ${snapshotMarker}`);
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(args.candidates, 'utf-8'));
+  } catch (err) {
+    console.error(`candidates JSON parse failed: ${(err as Error).message}`);
+    process.exit(1);
+  }
+  if (!Array.isArray(raw)) {
+    console.error('Candidates file must contain a JSON array.');
+    process.exit(1);
+  }
+
+  const { valid, dropped } = validateCandidates(raw);
+  for (const d of dropped) console.warn(`  [DROP] ${d.title} — ${d.reason}`);
+
+  const { kept, skipped } = detectIntraBatchCollisions(valid, idForCandidate);
+  for (const s of skipped) console.warn(`  [SKIP-DUP] ${s.title} — collides on id ${s.id}`);
+
+  console.log(`candidates:  ${raw.length} raw → ${valid.length} valid → ${kept.length} after intra-batch dedup\n`);
+
+  const repo = getRepo();
+  const existingIds = repo.list({ scope: 'repo', repoId }).map((m) => m.id);
+
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(now) + TTL_DAYS * 24 * 3600 * 1000).toISOString();
+
+  const provider = new MockAiProvider();
+  provider.setDefault(JSON.stringify(kept));
+
+  const pipeline = new EvolutionPipeline({
+    provider,
+    policyContext: { existingIds },
+    idForCandidate,
+    writeMemory: (input: CreateMemoryFromDecisionInput) =>
+      repo.create({
+        id: input.id,
+        type: input.type,
+        scope: input.scope,
+        title: input.title,
+        content: input.content,
+        status: 'active',
+        visibility: input.visibility,
+        confidence: input.confidence,
+        ttlDays: input.ttlDays ?? TTL_DAYS,
+        expiresAt: input.expiresAt ?? expiresAt,
+        tags: [...new Set([...input.tags, 'backfill', 'static-analysis'])],
+        sourceRefs: mergeStaticSourceRefs(input.sourceRefs, snapshotMarker),
+        repoId: input.repoId ?? repoId,
+        domain: input.domain ?? identity.domain,
+      } as any),
+    appendAudit,
+  });
+
+  const summary: SessionSummary = {
+    id: `static.${repoId.replace(/\//g, '-')}`,
+    sessionId: `static-${repoId.replace(/\//g, '-')}`,
+    repoId,
+    endedAt: now,
+    summary: `Static-analysis distilled candidates for ${repoId}.`,
+    decisions: [], constraints: [], mistakes: [], userCorrections: [],
+    filesTouched: [], candidateMemoryHints: [], candidateInstinctHints: [],
+    sensitivity: 'internal',
+    expiresAt,
+  };
+
+  const results = await pipeline.run(summary, { dryRun: args.dryRun });
+  const written = results.filter((r) => r.written).length;
+  const rejected = results.filter((r) => r.decision.decision === 'reject').length;
+  for (const r of results) {
+    const tag = r.written ? 'WRITE' : r.decision.decision.toUpperCase();
+    console.log(`  [${tag}] ${r.candidate.title} — ${r.decision.reason}`);
+  }
+  repo.close();
+
+  console.log(
+    `\nSummary: 写入 ${args.dryRun ? 0 : written} / 跳过(批内重复) ${skipped.length} / ` +
+    `剔除(校验失败) ${dropped.length} / judge拒绝 ${rejected}`,
+  );
+  if (args.dryRun) console.log('Dry-run: nothing written.');
+  else console.log(`Wrote to ${paths.shared.memory}. Not committed, not pushed.`);
+}
+
 export async function main(argv: string[]): Promise<void> {
   const sub = argv[0];
   if (sub === 'pack') {
     runPack(argv);
   } else if (sub === 'inject') {
-    console.log('inject: not yet implemented');
+    await runInject(argv);
   } else {
     console.error('Usage: backfill-static-memory.ts <pack|inject> [options]');
     process.exit(2);
