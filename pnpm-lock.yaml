@@ -38,6 +38,9 @@ importers:
       '@i-evolve/dashboard':
         specifier: workspace:*
         version: link:../dashboard
+      '@i-evolve/embedding':
+        specifier: workspace:*
+        version: link:../../packages/embedding
       '@i-evolve/git-sync':
         specifier: workspace:*
         version: link:../../packages/git-sync

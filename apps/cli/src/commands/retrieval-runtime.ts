@@ -1,54 +1,55 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths } from '@i-evolve/daemon';
+import { ModelManager, createProvider, resolveProfile } from '@i-evolve/embedding';
 import { MarkdownMemoryRepository, inferPromptIntent, recallMarkdown } from '@i-evolve/storage';
 
 function getRepo() {
   return new MarkdownMemoryRepository({ memoryDir: paths.shared.memory, dbPath: join(paths.base, 'shared', 'index.db') });
 }
 
-function modelRoot(model = 'BAAI/bge-m3') {
-  return join(paths.base, 'models', ...model.split('/'));
-}
-
 export async function handleModelCommand(subcommand: string | undefined, args: string[]): Promise<void> {
-  const model = args[0] === 'default' || !args[0] ? 'BAAI/bge-m3' : args[0];
+  const profileArg = args[0] === 'default' || !args[0] ? 'lite' : args[0];
+  const mgr = new ModelManager();
+
   if (subcommand === 'install') {
-    const root = modelRoot(model);
-    mkdirSync(join(root, 'snapshots'), { recursive: true });
-    writeFileSync(join(root, 'model.lock.yaml'), [
-      `model_id: ${model}`,
-      'runtime: FlagEmbedding',
-      `dimension: ${model.includes('bge-m3') ? 1024 : model.includes('e5-small') ? 384 : 512}`,
-      'revision: local-placeholder',
-      `installed_at: ${new Date().toISOString()}`,
-      'device: auto',
-      'precision: fp16_if_available',
-      '',
-    ].join('\n'), 'utf-8');
-    console.log(`Default embedding model installed: ${model}`);
-    console.log('Runtime: FlagEmbedding');
-    console.log('Device: auto');
+    const spec = resolveProfile(profileArg);
+    console.log(`Installing embedding model: ${spec.modelId} (profile=${spec.profile})`);
+    console.log('Downloading weights to ~/.i-evolve/models/ (first run may take a while)...');
+    const provider = createProvider(spec.profile);
+    const [vec] = await provider.embed(['probe'], 'query');
+    mgr.writeLock(spec.profile, vec.length, 'local');
+    console.log(`Installed: ${spec.modelId}  dimension=${vec.length}  runtime=transformers.js`);
     return;
   }
+
   if (subcommand === 'status') {
-    const lockPath = join(modelRoot(), 'model.lock.yaml');
-    console.log(existsSync(lockPath) ? 'Default embedding model installed: BAAI/bge-m3' : 'Default embedding model not installed: BAAI/bge-m3');
-    console.log('Runtime: FlagEmbedding');
-    console.log('Device: auto');
+    const active = mgr.activeProfile();
+    for (const s of mgr.list()) {
+      const mark = s.profile === active ? '*' : ' ';
+      console.log(`${mark} ${s.profile.padEnd(13)} ${s.modelId.padEnd(36)} dim=${s.dimension} installed=${s.installed} active=${s.active}`);
+    }
     return;
   }
+
   if (subcommand === 'list') {
-    console.log('default  BAAI/bge-m3  dimension=1024  runtime=FlagEmbedding');
-    console.log('lite     intfloat/multilingual-e5-small  dimension=384');
-    console.log('chinese_lite  BAAI/bge-small-zh-v1.5  dimension=512');
+    for (const s of mgr.list()) {
+      console.log(`${s.profile.padEnd(13)} ${s.modelId.padEnd(36)} dimension=${s.dimension}`);
+    }
     return;
   }
+
   if (subcommand === 'switch') {
-    console.log(`Embedding model switched to ${model}. Run i-evolve index rebuild to refresh derived indexes.`);
+    const spec = resolveProfile(profileArg);
+    if (!mgr.status(spec.profile).installed) {
+      console.error(`Model not installed: ${spec.modelId}. Run: i-evolve model install ${spec.profile}`);
+      process.exit(1);
+    }
+    mgr.switch(spec.profile);
+    console.log(`Embedding model switched to ${spec.modelId}. Run 'i-evolve index rebuild' to refresh vectors.`);
     return;
   }
-  console.error('Usage: i-evolve model <install|status|list|switch> [default|model_id]');
+
+  console.error('Usage: i-evolve model <install|status|list|switch> [lite|default|chinese_lite]');
   process.exit(1);
 }
 
