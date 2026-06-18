@@ -8,7 +8,7 @@ function getRepo() {
 }
 
 export async function handleModelCommand(subcommand: string | undefined, args: string[]): Promise<void> {
-  const profileArg = args[0] === 'default' || !args[0] ? 'lite' : args[0];
+  const profileArg = args[0] && args[0].length > 0 ? args[0] : 'lite';
   const mgr = new ModelManager();
 
   if (subcommand === 'install') {

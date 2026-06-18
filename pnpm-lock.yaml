@@ -142,6 +142,9 @@ importers:
       '@i-evolve/core':
         specifier: workspace:*
         version: link:../core
+      '@i-evolve/embedding':
+        specifier: workspace:*
+        version: link:../embedding
       '@i-evolve/git-sync':
         specifier: workspace:*
         version: link:../git-sync

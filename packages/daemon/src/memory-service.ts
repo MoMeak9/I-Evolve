@@ -10,6 +10,7 @@ import {
   retrieveContextDebug,
 } from '@i-evolve/storage';
 import { IEvolveError } from '@i-evolve/shared';
+import { ModelManager, createProvider } from '@i-evolve/embedding';
 import { paths } from './paths.js';
 import { AuditWriter } from './audit-writer.js';
 import type {
@@ -33,20 +34,28 @@ export interface MemoryRef {
 export class DaemonMemoryService {
   private audit = new AuditWriter();
 
-  recall(input: MemoryRecallInput): { context: string; memories: MemoryRef[]; conflicts: unknown[]; stats: unknown } {
+  async recall(input: MemoryRecallInput): Promise<{ context: string; memories: MemoryRef[]; conflicts: unknown[]; stats: unknown }> {
     const repo = this.openRepo();
     try {
       const identity = detectRepoIdentity({
         cwd: input.cwd,
         manualDomain: input.domain,
       });
+      let deps: import('@i-evolve/storage').RetrievalDeps | undefined;
+      if (input.query) {
+        const provider = createProvider(new ModelManager().activeProfile());
+        if (await provider.isReady()) {
+          const [qv] = await provider.embed([input.query], 'query');
+          deps = { index: repo.getIndex(), modelId: provider.id, queryVector: qv };
+        }
+      }
       const debug = retrieveContextDebug(repo, {
         repoId: input.repoId ?? identity.repoId,
         domain: input.domain ?? identity.domain,
         packageNames: identity.packageNames,
         path: input.cwd,
         query: input.query,
-      });
+      }, undefined, deps);
       return {
         context: formatContextMarkdown({
           repoId: input.repoId ?? identity.repoId,
