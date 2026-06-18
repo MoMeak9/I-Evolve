@@ -148,10 +148,10 @@ export function chunkMemory(memory: MemoryItem, indexedAt = new Date().toISOStri
   });
 }
 
-export function recallMarkdown(repo: MarkdownMemoryRepository, phase: RecallPhase, ctx: RetrievalContext, options: { prompt?: string; debug?: boolean } = {}): string {
+export function recallMarkdown(repo: MarkdownMemoryRepository, phase: RecallPhase, ctx: RetrievalContext, options: { prompt?: string; debug?: boolean; deps?: import('./context-retrieval.js').RetrievalDeps } = {}): string {
   const intent = phase === 'user_prompt_submit' ? inferPromptIntent(options.prompt ?? ctx.query ?? '') : undefined;
   const query = intent?.search_queries[0] ?? ctx.query;
-  const result = retrieveContextDebug(repo, { ...ctx, query, domain: intent?.domain ?? ctx.domain });
+  const result = retrieveContextDebug(repo, { ...ctx, query, domain: intent?.domain ?? ctx.domain }, undefined, options.deps);
   return phase === 'session_start' ? formatSessionStart(result, options.debug) : formatPromptSpecific(result, intent, options.debug);
 }
 
