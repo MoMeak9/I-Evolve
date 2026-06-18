@@ -7,6 +7,7 @@ import { listTrackedFiles, summarizeDocs } from '../scripts/backfill-static-memo
 import { scanModules } from '../scripts/backfill-static-memory.ts';
 import { probeFileHeads } from '../scripts/backfill-static-memory.ts';
 import { buildContextPack } from '../scripts/backfill-static-memory.ts';
+import { validateCandidates, detectIntraBatchCollisions } from '../scripts/backfill-static-memory.ts';
 
 function tmpGitRepo(): string {
   const dir = join('/tmp', `ie-static-${randomBytes(4).toString('hex')}`);
@@ -118,5 +119,36 @@ describe('buildContextPack', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('validateCandidates', () => {
+  it('keeps valid candidates and drops malformed ones with reasons', () => {
+    const raw = [
+      { title: 'ok', type: 'repo_fact', proposedScope: 'repo', content: 'c', confidence: 0.8, sourceRefs: [], evidence: [], riskFlags: [] },
+      { title: '', type: 'repo_fact', proposedScope: 'repo', content: 'c', confidence: 0.8 },
+      { title: 'bad type', type: 'nope', proposedScope: 'repo', content: 'c', confidence: 0.8 },
+      { title: 'bad scope', type: 'decision', proposedScope: 'galaxy', content: 'c', confidence: 0.8 },
+      { title: 'bad conf', type: 'decision', proposedScope: 'repo', content: 'c', confidence: 2 },
+    ];
+    const { valid, dropped } = validateCandidates(raw);
+    expect(valid.map((c) => c.title)).toEqual(['ok']);
+    expect(dropped).toHaveLength(4);
+    expect(dropped[0].reason).toMatch(/title|content|type|scope|confidence/);
+  });
+});
+
+describe('detectIntraBatchCollisions', () => {
+  it('keeps first, skips later colliding ids', () => {
+    const idFn = (c: { title: string }) => `repo.x.${c.title}`;
+    const cands = [
+      { title: 'a', type: 'repo_fact', proposedScope: 'repo', content: '1', confidence: 0.8, sourceRefs: [], evidence: [], riskFlags: [] },
+      { title: 'a', type: 'repo_fact', proposedScope: 'repo', content: '2', confidence: 0.8, sourceRefs: [], evidence: [], riskFlags: [] },
+      { title: 'b', type: 'repo_fact', proposedScope: 'repo', content: '3', confidence: 0.8, sourceRefs: [], evidence: [], riskFlags: [] },
+    ] as any;
+    const { kept, skipped } = detectIntraBatchCollisions(cands, idFn as any);
+    expect(kept.map((c) => c.content)).toEqual(['1', '3']);
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].id).toBe('repo.x.a');
   });
 });

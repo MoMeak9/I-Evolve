@@ -12,6 +12,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detectRepoIdentity } from '@i-evolve/storage';
+import type { CandidateMemory } from '@i-evolve/core';
+import type { MemoryScope, MemoryType } from '@i-evolve/shared';
 
 // ---- pack 区（Task 3-5 填充）----
 
@@ -129,6 +131,67 @@ export function probeFileHeads(repo: string, files: string[]): FileHead[] {
   return out;
 }
 // ---- inject 区（Task 6-7 填充）----
+
+const TYPES: MemoryType[] = ['repo_fact', 'task_constraint', 'decision', 'pitfall', 'workflow_rule'];
+const SCOPES: MemoryScope[] = ['global', 'domain', 'repo', 'task'];
+
+export interface DroppedCandidate { title: string; reason: string }
+
+/** 逐条预校验：坏条目剔除（带原因），避免一条脏数据 throw 中断整批 (§6.3)。 */
+export function validateCandidates(raw: unknown[]): { valid: CandidateMemory[]; dropped: DroppedCandidate[] } {
+  const valid: CandidateMemory[] = [];
+  const dropped: DroppedCandidate[] = [];
+  for (const item of raw) {
+    const c = item as Partial<CandidateMemory>;
+    const title = typeof c.title === 'string' ? c.title : '';
+    const reason =
+      !title ? 'empty title'
+      : !c.content || typeof c.content !== 'string' ? 'empty content'
+      : !TYPES.includes(c.type as MemoryType) ? `invalid type: ${String(c.type)}`
+      : !SCOPES.includes(c.proposedScope as MemoryScope) ? `invalid proposedScope: ${String(c.proposedScope)}`
+      : typeof c.confidence !== 'number' || c.confidence < 0 || c.confidence > 1 ? `invalid confidence: ${String(c.confidence)}`
+      : '';
+    if (reason) {
+      dropped.push({ title: title || '(no title)', reason });
+      continue;
+    }
+    valid.push({
+      title,
+      type: c.type as MemoryType,
+      proposedScope: c.proposedScope as MemoryScope,
+      content: c.content as string,
+      evidence: c.evidence ?? [],
+      sourceRefs: c.sourceRefs ?? [],
+      confidence: c.confidence as number,
+      riskFlags: c.riskFlags ?? [],
+      repoId: c.repoId,
+      domain: c.domain,
+    });
+  }
+  return { valid, dropped };
+}
+
+export interface SkippedCandidate { id: string; title: string }
+
+/** 同一批内算出相同 id：保留首条，跳过后者，绝不静默覆盖 (§6.2)。 */
+export function detectIntraBatchCollisions(
+  cands: CandidateMemory[],
+  idFn: (c: CandidateMemory, scope: MemoryScope) => string,
+): { kept: CandidateMemory[]; skipped: SkippedCandidate[] } {
+  const seen = new Set<string>();
+  const kept: CandidateMemory[] = [];
+  const skipped: SkippedCandidate[] = [];
+  for (const c of cands) {
+    const id = idFn(c, c.proposedScope);
+    if (seen.has(id)) {
+      skipped.push({ id, title: c.title });
+    } else {
+      seen.add(id);
+      kept.push(c);
+    }
+  }
+  return { kept, skipped };
+}
 
 export interface StaticContextPack {
   repoId: string;
