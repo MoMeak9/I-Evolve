@@ -95,6 +95,38 @@ export function scanModules(repo: string, files: string[]): ModuleInfo[] {
   }
   return mods;
 }
+
+export interface FileHead {
+  path: string;
+  hasHeaderDoc: boolean;
+  exports: string[];
+}
+
+const SRC_EXT = /\.(ts|tsx|js|jsx|mts|cts|go|py|java|kt|rs)$/;
+const HEAD_SCAN_LINES = 40;
+const EXPORT_RE = /^export\s+(?:async\s+)?(?:function|const|class|interface|type|enum)\s+([A-Za-z0-9_$]+)/;
+
+export function probeFileHeads(repo: string, files: string[]): FileHead[] {
+  const out: FileHead[] = [];
+  for (const rel of files) {
+    if (!SRC_EXT.test(rel)) continue;
+    let raw: string;
+    try {
+      raw = readFileSync(join(repo, rel), 'utf-8');
+    } catch {
+      continue; // 单文件读失败：跳过
+    }
+    const head = raw.split('\n').slice(0, HEAD_SCAN_LINES);
+    const hasHeaderDoc = /^\s*(\/\*\*|\/\/|#|""")/.test(head[0] ?? '');
+    const exports: string[] = [];
+    for (const line of raw.split('\n')) {
+      const m = line.match(EXPORT_RE);
+      if (m) exports.push(m[1]);
+    }
+    out.push({ path: rel, hasHeaderDoc, exports });
+  }
+  return out;
+}
 // ---- inject 区（Task 6-7 填充）----
 
 export async function main(argv: string[]): Promise<void> {

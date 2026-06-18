@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { listTrackedFiles, summarizeDocs } from '../scripts/backfill-static-memory.ts';
 import { scanModules } from '../scripts/backfill-static-memory.ts';
+import { probeFileHeads } from '../scripts/backfill-static-memory.ts';
 
 function tmpGitRepo(): string {
   const dir = join('/tmp', `ie-static-${randomBytes(4).toString('hex')}`);
@@ -68,6 +69,28 @@ describe('scanModules', () => {
       expect(mods[0].manifest.deps).toContain('dep');
       expect(mods[0].manifest.scripts.build).toBe('tsc');
       expect(mods[0].readmePath).toBe('packages/core/README.md');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('probeFileHeads', () => {
+  it('flags header doc and lists export names, no comment body', () => {
+    const dir = join('/tmp', `ie-heads-${randomBytes(4).toString('hex')}`);
+    mkdirSync(dir, { recursive: true });
+    try {
+      writeFileSync(join(dir, 'foo.ts'),
+        '/**\n * file header\n */\nexport function fooBar() {}\nexport const baz = 1;\n');
+      writeFileSync(join(dir, 'bare.ts'), 'const x = 1;\n');
+      const heads = probeFileHeads(dir, ['foo.ts', 'bare.ts', 'README.md']);
+      const foo = heads.find((h) => h.path === 'foo.ts')!;
+      expect(foo.hasHeaderDoc).toBe(true);
+      expect(foo.exports).toEqual(['fooBar', 'baz']);
+      const bare = heads.find((h) => h.path === 'bare.ts')!;
+      expect(bare.hasHeaderDoc).toBe(false);
+      expect(bare.exports).toEqual([]);
+      expect(heads.find((h) => h.path === 'README.md')).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
