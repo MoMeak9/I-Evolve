@@ -165,7 +165,7 @@ export function buildContextPack(
   repo: string,
   opts: { maxFiles?: number; domain?: string } = {},
 ): StaticContextPack {
-  const maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES;
+  const maxFiles = Number.isFinite(opts.maxFiles) ? (opts.maxFiles as number) : DEFAULT_MAX_FILES;
   const identity = detectRepoIdentity({ cwd: repo, manualDomain: opts.domain });
   const all = listTrackedFiles(repo);
   const prioritized = prioritizeFiles(all);
