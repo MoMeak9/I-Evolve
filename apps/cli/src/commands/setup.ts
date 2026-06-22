@@ -30,6 +30,7 @@ export async function handleSetupCommand(
   const target = subcommand ?? 'all';
   const projectRoot = resolve((flags['project-root'] as string | undefined) ?? process.cwd());
   const dryRun = Boolean(flags['dry-run']);
+  const bootstrap = Boolean(flags.bootstrap);
 
   if (target === 'codex' || target === 'all') {
     const configPath = resolveHome((flags['codex-config'] as string | undefined) ?? '~/.codex/config.toml');
@@ -58,19 +59,12 @@ export async function handleSetupCommand(
     }
   }
 
-  if (target === 'all') {
-    if (dryRun) {
-      console.log('[dry-run] Would run pnpm install, pnpm build, memory init-local, and doctor --bootstrap.');
-    } else {
-      runPnpm(projectRoot, ['install']);
-      runPnpm(projectRoot, ['build']);
-      runPnpm(projectRoot, ['tsx', 'apps/cli/src/index.ts', 'memory', 'init-local']);
-      runPnpm(projectRoot, ['tsx', 'apps/cli/src/index.ts', 'doctor', '--bootstrap']);
-    }
+  if (target === 'all' || (target === 'codex' && bootstrap)) {
+    runBootstrapPrerequisites(projectRoot, dryRun);
   }
 
   if (!['codex', 'claude-code', 'all'].includes(target)) {
-    console.error('Usage: i-evolve setup <all|codex|claude-code> [--dry-run]');
+    console.error('Usage: i-evolve setup <all|codex|claude-code> [--bootstrap] [--dry-run]');
     process.exit(1);
   }
 }
@@ -179,6 +173,17 @@ function resolveHome(path: string): string {
 
 function tomlString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function runBootstrapPrerequisites(projectRoot: string, dryRun: boolean): void {
+  if (dryRun) {
+    console.log('[dry-run] Would run pnpm install, pnpm build, memory init-local, and doctor --bootstrap.');
+    return;
+  }
+  runPnpm(projectRoot, ['install']);
+  runPnpm(projectRoot, ['build']);
+  runPnpm(projectRoot, ['tsx', 'apps/cli/src/index.ts', 'memory', 'init-local']);
+  runPnpm(projectRoot, ['tsx', 'apps/cli/src/index.ts', 'doctor', '--bootstrap']);
 }
 
 function runPnpm(cwd: string, args: string[]): void {

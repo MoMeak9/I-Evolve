@@ -6,7 +6,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "i-evolve inject --format markdown"
+            "command": "i-evolve inject --format markdown --hook"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "i-evolve recall --phase user_prompt_submit --hook"
           }
         ]
       }

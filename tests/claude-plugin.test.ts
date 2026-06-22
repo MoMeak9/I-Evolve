@@ -32,7 +32,14 @@ describe('Claude plugin structure', () => {
     const json = JSON.parse(readFileSync(join(pluginDir, 'hooks', 'hooks.json'), 'utf-8'));
     const hook = json.hooks.SessionStart[0].hooks[0];
     expect(hook.type).toBe('command');
-    expect(hookCommandText(hook)).toBe('i-evolve inject --format markdown');
+    expect(hookCommandText(hook)).toBe('i-evolve inject --format markdown --hook');
+  });
+
+  it('UserPromptSubmit hook calls i-evolve recall', () => {
+    const json = JSON.parse(readFileSync(join(pluginDir, 'hooks', 'hooks.json'), 'utf-8'));
+    const hook = json.hooks.UserPromptSubmit[0].hooks[0];
+    expect(hook.type).toBe('command');
+    expect(hookCommandText(hook)).toBe('i-evolve recall --phase user_prompt_submit --hook');
   });
 
   it('PostToolUse hook calls i-evolve observe', () => {

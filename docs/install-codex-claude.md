@@ -41,9 +41,19 @@ pnpm tsx apps/cli/src/index.ts setup all --project-root /path/to/I-Evolve
 
 ## Codex
 
-中文：配置 Codex：
+中文：首次安装时，推荐运行 `setup all` 一次，以安装依赖、构建项目、初始化本地 memory，并配置 Codex/Claude Code。只需要 Codex 时，也可以运行 `setup codex --bootstrap`，它会在配置 Codex 后执行同样的运行时前置步骤（`pnpm install`、`pnpm build`、`memory init-local`、`doctor --bootstrap`）。
 
-English: Configure Codex:
+English: For first-time installs, run `setup all` once to install dependencies, build the project, initialize local memory, and configure Codex/Claude Code. If you only need Codex, you can run `setup codex --bootstrap`; it configures Codex and then performs the same runtime prerequisite steps (`pnpm install`, `pnpm build`, `memory init-local`, and `doctor --bootstrap`).
+
+```bash
+pnpm tsx apps/cli/src/index.ts setup all
+# or, for Codex only:
+pnpm tsx apps/cli/src/index.ts setup codex --bootstrap
+```
+
+中文：已有安装只想快速刷新 Codex 配置时，运行不带 `--bootstrap` 的配置模式：
+
+English: For existing installations, keep the fast config-only mode by omitting `--bootstrap`:
 
 ```bash
 pnpm tsx apps/cli/src/index.ts setup codex
@@ -57,8 +67,9 @@ English: This updates `~/.codex/config.toml` with:
 [mcp_servers.i-evolve]
 command = "pnpm"
 args = [
-  "--dir",
+  "-C",
   "/path/to/I-Evolve",
+  "exec",
   "tsx",
   "apps/cli/src/index.ts",
   "mcp",
@@ -68,9 +79,9 @@ args = [
 startup_timeout_sec = 30
 ```
 
-中文：配置完成后重启 Codex。使用 MCP tools 前先启动 daemon：
+中文：配置完成后重启 Codex。如果没有使用 `setup all` 或 `setup codex --bootstrap`，使用 MCP tools 前请先完成前置步骤并启动 daemon：
 
-English: Restart Codex after setup. Start the daemon before using MCP tools:
+English: Restart Codex after setup. If you did not use `setup all` or `setup codex --bootstrap`, complete the prerequisites and start the daemon before using MCP tools:
 
 ```bash
 pnpm tsx apps/cli/src/index.ts daemon start
@@ -88,6 +99,22 @@ English: Available MCP tools:
 - `audit_memory`
 - `explain_memory`
 - `sync_memory`
+
+### Codex MCP Usage Guidance
+
+English: Keep this workflow short enough to paste into Codex agent context:
+
+- Before planning non-trivial repository work, call `recall` with the repository, feature, or bug topic.
+- After implementation, call `remember` only for durable decisions, project conventions, architecture notes, or surprising debugging outcomes; skip transient task details and never store secrets.
+- When memory behavior is confusing, use `audit_memory` for governance/history and `explain_memory` for why a memory was selected or how it was derived.
+- Use the other tools listed above (`forget`, `search_memory`, and `sync_memory`) to remove stale memory, find existing notes, or sync shared memory.
+
+中文：这段工作流应保持足够短，方便粘贴到 Codex agent context：
+
+- 在规划非平凡仓库工作前，使用仓库、功能或 bug 主题调用 `recall`。
+- 实现后，只用 `remember` 记录持久决策、项目约定、架构说明或重要调试结论；跳过临时任务细节，且绝不存储密钥。
+- memory 行为令人困惑时，用 `audit_memory` 查看治理/历史，用 `explain_memory` 查看记忆为何被选中或如何产生。
+- 需要删除过期记忆、查找现有记录或同步共享记忆时，使用上方其他工具（`forget`、`search_memory`、`sync_memory`）。
 
 ## Claude Code
 
