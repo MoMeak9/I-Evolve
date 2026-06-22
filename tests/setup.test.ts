@@ -11,14 +11,27 @@ import {
 } from '../apps/cli/src/commands/setup.js';
 
 describe('setup command helpers', () => {
-  it('builds a Codex MCP config block for this workspace', () => {
-    const block = buildCodexMcpConfigBlock('/repo/I-Evolve');
+  it('builds a development Codex MCP config block for this workspace', () => {
+    const block = buildCodexMcpConfigBlock('/repo/I-Evolve', 'dev');
 
     expect(block).toContain('[mcp_servers.i-evolve]');
     expect(block).toContain('command = "pnpm"');
+    expect(block).toContain('"-C"');
     expect(block).toContain('"/repo/I-Evolve"');
+    expect(block).toContain('"exec"');
+    expect(block).toContain('"tsx"');
     expect(block).toContain('"mcp"');
     expect(block).toContain('"--stdio"');
+  });
+
+  it('builds an installed-binary Codex MCP config block', () => {
+    const block = buildCodexMcpConfigBlock('/repo/I-Evolve', 'bin');
+
+    expect(block).toContain('[mcp_servers.i-evolve]');
+    expect(block).toContain('command = "i-evolve"');
+    expect(block).toContain('args = ["mcp", "start", "--stdio"]');
+    expect(block).not.toContain('command = "pnpm"');
+    expect(block).not.toContain('/repo/I-Evolve');
   });
 
   it('inserts or replaces the i-evolve Codex MCP server block', () => {
@@ -38,7 +51,7 @@ describe('setup command helpers', () => {
     ].join('\n'), 'utf-8');
 
     try {
-      setupCodexConfig({ configPath, projectRoot: '/repo/I-Evolve' });
+      setupCodexConfig({ configPath, projectRoot: '/repo/I-Evolve', mode: 'dev' });
       const content = readFileSync(configPath, 'utf-8');
       expect(content).toContain('[mcp_servers.old]');
       expect(content).toContain('[mcp_servers.i-evolve]');

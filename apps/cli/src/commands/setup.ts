@@ -3,9 +3,12 @@ import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 
+export type CodexSetupMode = 'dev' | 'bin';
+
 export interface SetupCodexConfigOptions {
   configPath: string;
   projectRoot: string;
+  mode?: CodexSetupMode;
 }
 
 export interface InstallClaudeCodePluginOptions {
@@ -30,15 +33,17 @@ export async function handleSetupCommand(
   const target = subcommand ?? 'all';
   const projectRoot = resolve((flags['project-root'] as string | undefined) ?? process.cwd());
   const dryRun = Boolean(flags['dry-run']);
+  const codexMode = resolveCodexSetupMode(flags.mode);
 
   if (target === 'codex' || target === 'all') {
     const configPath = resolveHome((flags['codex-config'] as string | undefined) ?? '~/.codex/config.toml');
     if (dryRun) {
       console.log(`[dry-run] Would update Codex MCP config: ${configPath}`);
-      console.log(buildCodexMcpConfigBlock(projectRoot));
+      console.log(`[dry-run] Codex MCP mode: ${codexMode}`);
+      console.log(buildCodexMcpConfigBlock(projectRoot, codexMode));
     } else {
-      setupCodexConfig({ configPath, projectRoot });
-      console.log(`Codex MCP configured: ${configPath}`);
+      setupCodexConfig({ configPath, projectRoot, mode: codexMode });
+      console.log(`Codex MCP configured (${codexMode} mode): ${configPath}`);
     }
   }
 
@@ -70,12 +75,22 @@ export async function handleSetupCommand(
   }
 
   if (!['codex', 'claude-code', 'all'].includes(target)) {
-    console.error('Usage: i-evolve setup <all|codex|claude-code> [--dry-run]');
+    console.error('Usage: i-evolve setup <all|codex|claude-code> [--dry-run] [--mode dev|bin|auto]');
     process.exit(1);
   }
 }
 
-export function buildCodexMcpConfigBlock(projectRoot: string): string {
+export function buildCodexMcpConfigBlock(projectRoot: string, mode: CodexSetupMode = 'dev'): string {
+  if (mode === 'bin') {
+    return [
+      '[mcp_servers.i-evolve]',
+      'command = "i-evolve"',
+      'args = ["mcp", "start", "--stdio"]',
+      'startup_timeout_sec = 30',
+      '',
+    ].join('\n');
+  }
+
   const escapedRoot = tomlString(projectRoot);
   return [
     '[mcp_servers.i-evolve]',
@@ -96,7 +111,7 @@ export function buildCodexMcpConfigBlock(projectRoot: string): string {
 }
 
 export function setupCodexConfig(options: SetupCodexConfigOptions): void {
-  const block = buildCodexMcpConfigBlock(options.projectRoot);
+  const block = buildCodexMcpConfigBlock(options.projectRoot, options.mode ?? 'dev');
   if (!existsSync(dirname(options.configPath))) mkdirSync(dirname(options.configPath), { recursive: true });
   const current = existsSync(options.configPath) ? readFileSync(options.configPath, 'utf-8') : '';
   const next = replaceTomlTable(current, 'mcp_servers.i-evolve', block);
@@ -156,6 +171,23 @@ export function setupClaudeSettings(options: SetupClaudeSettingsOptions): void {
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
 }
 
+function resolveCodexSetupMode(value: unknown): CodexSetupMode {
+  if (value === undefined || value === 'auto') return commandExists('i-evolve') ? 'bin' : 'dev';
+  if (value === 'dev' || value === 'bin') return value;
+  throw new Error(`Invalid setup mode: ${String(value)}. Expected dev, bin, or auto.`);
+}
+
+function commandExists(command: string): boolean {
+  const lookup = process.platform === 'win32' ? 'where' : 'sh';
+  const args = process.platform === 'win32' ? [command] : ['-c', 'command -v "$1"', 'sh', command];
+  try {
+    execFileSync(lookup, args, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function replaceTomlTable(content: string, table: string, block: string): string {
   const lines = content.split('\n');
   const header = `[${table}]`;
@@ -180,6 +212,7 @@ function resolveHome(path: string): string {
 function tomlString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
+
 
 function runPnpm(cwd: string, args: string[]): void {
   execFileSync('pnpm', args, { cwd, stdio: 'inherit' });

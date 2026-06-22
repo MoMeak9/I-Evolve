@@ -49,22 +49,43 @@ English: Configure Codex:
 pnpm tsx apps/cli/src/index.ts setup codex
 ```
 
-中文：该命令会更新 `~/.codex/config.toml`，加入：
+中文：默认会自动检测 `i-evolve` 是否在 `PATH` 中。也可以显式选择 development checkout 模式或 installed-binary 模式：
 
-English: This updates `~/.codex/config.toml` with:
+English: By default this auto-detects whether `i-evolve` is available on `PATH`. You can also explicitly choose development checkout mode or installed-binary mode:
+
+```bash
+pnpm tsx apps/cli/src/index.ts setup codex --mode dev
+pnpm tsx apps/cli/src/index.ts setup codex --mode bin
+```
+
+中文：development checkout 模式会更新 `~/.codex/config.toml`，加入：
+
+English: Development checkout mode updates `~/.codex/config.toml` with:
 
 ```toml
 [mcp_servers.i-evolve]
 command = "pnpm"
 args = [
-  "--dir",
+  "-C",
   "/path/to/I-Evolve",
+  "exec",
   "tsx",
   "apps/cli/src/index.ts",
   "mcp",
   "start",
   "--stdio"
 ]
+startup_timeout_sec = 30
+```
+
+中文：installed-binary 模式适合已经全局安装 `i-evolve` 的环境，会写入：
+
+English: Installed-binary mode is for environments where `i-evolve` is already globally available and writes:
+
+```toml
+[mcp_servers.i-evolve]
+command = "i-evolve"
+args = ["mcp", "start", "--stdio"]
 startup_timeout_sec = 30
 ```
 
@@ -191,7 +212,8 @@ English: Use custom paths in tests or managed environments:
 ```bash
 pnpm tsx apps/cli/src/index.ts setup codex \
   --codex-config /tmp/codex/config.toml \
-  --project-root /path/to/I-Evolve
+  --project-root /path/to/I-Evolve \
+  --mode dev
 
 pnpm tsx apps/cli/src/index.ts setup claude-code \
   --claude-plugin-dir /tmp/claude/plugins/i-evolve \
