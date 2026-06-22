@@ -53,6 +53,9 @@ import {
   EvolutionPipeline,
   MockAiProvider,
   OpenAiCompatibleProvider,
+  ClaudeCliProvider,
+  CodexCliProvider,
+  getProvider as getSharedProvider,
   type AiProvider,
   type AiCompleteInput,
   type AiCompleteOutput,
@@ -364,100 +367,14 @@ function buildSessionSummary(repoId: string, win: Window, ttlYears: number): Ses
 // infra: provider, repo, audit, watermark, sha dedup
 // ---------------------------------------------------------------------------
 
-/**
- * Distillation via the local `claude -p` (headless) CLI, used as a subprocess.
- * The extractor's `system` text replaces Claude Code's default system prompt
- * (`--system-prompt`), and `prompt` is piped on stdin. Default text output is
- * the model's raw reply, which the extractor feeds straight to extractJson().
- * All tools are disabled so a -p run can never block on a tool/permission
- * prompt. temperature/maxTokens are ignored (the CLI does not expose them).
- *
- * The packaged extractor system prompt does not enumerate the allowed enum
- * values, and normalize() does not validate them, so a live model can emit an
- * out-of-enum `type`/`proposedScope` that later fails schema validation on
- * write. We append a strict enum + JSON-only contract here, at the provider
- * layer, to keep the model's output inside the schema.
- */
-const ENUM_CONTRACT = [
-  '',
-  'STRICT OUTPUT CONTRACT (must follow exactly):',
-  '- Output ONLY a JSON array. No prose, no markdown code fences.',
-  '- "type" MUST be one of: repo_fact, task_constraint, decision, pitfall, workflow_rule.',
-  '- "proposedScope" MUST be one of: global, domain, repo, task.',
-  '- If a value would not match, remap it to the closest allowed value (e.g. a feature/architecture choice -> decision; a bug/gotcha -> pitfall; a durable fact about the repo -> repo_fact).',
-  '- "confidence" is a number between 0 and 1.',
-].join('\n');
-
-class ClaudeCliProvider implements AiProvider {
-  constructor(private model: string) {}
-
-  async complete(input: AiCompleteInput): Promise<AiCompleteOutput> {
-    const raw = execFileSync(
-      'claude',
-      [
-        '-p',
-        '--model', this.model,
-        '--output-format', 'text',
-        '--allowed-tools', '',
-        '--system-prompt', input.system + '\n' + ENUM_CONTRACT,
-      ],
-      {
-        input: input.prompt,
-        encoding: 'utf-8',
-        maxBuffer: 32 * 1024 * 1024,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    );
-    // The packaged extractJson() fallback throws if any prose trails the JSON
-    // array. A live model is nondeterministic about preambles/trailers, so we
-    // balance-scan the first complete [...] / {...} here and hand back only
-    // that — keeping the extractor on its happy path.
-    return { text: firstBalancedJson(raw) ?? raw };
-  }
-}
-
-/** Return the first complete balanced JSON array/object substring, or null. */
-function firstBalancedJson(text: string): string | null {
-  const start = text.search(/[[{]/);
-  if (start === -1) return null;
-  const open = text[start];
-  const close = open === '[' ? ']' : '}';
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (ch === '\\') esc = true;
-      else if (ch === '"') inStr = false;
-      continue;
-    }
-    if (ch === '"') inStr = true;
-    else if (ch === open) depth++;
-    else if (ch === close) {
-      depth--;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-  return null;
-}
-
 function getProvider(): { provider: AiProvider; live: boolean } {
-  // Preferred: local `claude -p` CLI. Opt in with IEVOLVE_CLAUDE_CLI=1.
-  if (process.env.IEVOLVE_CLAUDE_CLI === '1') {
-    const model = process.env.IEVOLVE_CLAUDE_MODEL ?? 'sonnet';
-    return { provider: new ClaudeCliProvider(model), live: true };
+  try {
+    return { provider: getSharedProvider(), live: true };
+  } catch {
+    const mock = new MockAiProvider();
+    mock.setDefault('[]');
+    return { provider: mock, live: false };
   }
-  const baseUrl = process.env.IEVOLVE_AI_BASE_URL;
-  const apiKey = process.env.IEVOLVE_AI_API_KEY;
-  const model = process.env.IEVOLVE_AI_MODEL;
-  if (baseUrl && apiKey && model) {
-    return { provider: new OpenAiCompatibleProvider({ baseUrl, apiKey, model }), live: true };
-  }
-  const mock = new MockAiProvider();
-  mock.setDefault('[]');
-  return { provider: mock, live: false };
 }
 
 function getRepo(): MarkdownMemoryRepository {
