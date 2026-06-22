@@ -41,9 +41,19 @@ pnpm tsx apps/cli/src/index.ts setup all --project-root /path/to/I-Evolve
 
 ## Codex
 
-中文：配置 Codex：
+中文：首次安装时，推荐运行 `setup all` 一次，以安装依赖、构建项目、初始化本地 memory，并配置 Codex/Claude Code。只需要 Codex 时，也可以运行 `setup codex --bootstrap`，它会在配置 Codex 后执行同样的运行时前置步骤（`pnpm install`、`pnpm build`、`memory init-local`、`doctor --bootstrap`）。
 
-English: Configure Codex:
+English: For first-time installs, run `setup all` once to install dependencies, build the project, initialize local memory, and configure Codex/Claude Code. If you only need Codex, you can run `setup codex --bootstrap`; it configures Codex and then performs the same runtime prerequisite steps (`pnpm install`, `pnpm build`, `memory init-local`, and `doctor --bootstrap`).
+
+```bash
+pnpm tsx apps/cli/src/index.ts setup all
+# or, for Codex only:
+pnpm tsx apps/cli/src/index.ts setup codex --bootstrap
+```
+
+中文：已有安装只想快速刷新 Codex 配置时，运行不带 `--bootstrap` 的配置模式：
+
+English: For existing installations, keep the fast config-only mode by omitting `--bootstrap`:
 
 ```bash
 pnpm tsx apps/cli/src/index.ts setup codex
@@ -57,8 +67,9 @@ English: This updates `~/.codex/config.toml` with:
 [mcp_servers.i-evolve]
 command = "pnpm"
 args = [
-  "--dir",
+  "-C",
   "/path/to/I-Evolve",
+  "exec",
   "tsx",
   "apps/cli/src/index.ts",
   "mcp",
@@ -68,9 +79,9 @@ args = [
 startup_timeout_sec = 30
 ```
 
-中文：配置完成后重启 Codex。使用 MCP tools 前先启动 daemon：
+中文：配置完成后重启 Codex。如果没有使用 `setup all` 或 `setup codex --bootstrap`，使用 MCP tools 前请先完成前置步骤并启动 daemon：
 
-English: Restart Codex after setup. Start the daemon before using MCP tools:
+English: Restart Codex after setup. If you did not use `setup all` or `setup codex --bootstrap`, complete the prerequisites and start the daemon before using MCP tools:
 
 ```bash
 pnpm tsx apps/cli/src/index.ts daemon start
