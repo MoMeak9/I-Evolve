@@ -100,6 +100,22 @@ English: Available MCP tools:
 - `explain_memory`
 - `sync_memory`
 
+### Codex MCP Usage Guidance
+
+English: Keep this workflow short enough to paste into Codex agent context:
+
+- Before planning non-trivial repository work, call `recall` with the repository, feature, or bug topic.
+- After implementation, call `remember` only for durable decisions, project conventions, architecture notes, or surprising debugging outcomes; skip transient task details and never store secrets.
+- When memory behavior is confusing, use `audit_memory` for governance/history and `explain_memory` for why a memory was selected or how it was derived.
+- Use the other tools listed above (`forget`, `search_memory`, and `sync_memory`) to remove stale memory, find existing notes, or sync shared memory.
+
+中文：这段工作流应保持足够短，方便粘贴到 Codex agent context：
+
+- 在规划非平凡仓库工作前，使用仓库、功能或 bug 主题调用 `recall`。
+- 实现后，只用 `remember` 记录持久决策、项目约定、架构说明或重要调试结论；跳过临时任务细节，且绝不存储密钥。
+- memory 行为令人困惑时，用 `audit_memory` 查看治理/历史，用 `explain_memory` 查看记忆为何被选中或如何产生。
+- 需要删除过期记忆、查找现有记录或同步共享记忆时，使用上方其他工具（`forget`、`search_memory`、`sync_memory`）。
+
 ## Claude Code
 
 中文：安装 Claude Code plugin：
