@@ -232,14 +232,31 @@ function isRecentSessionSummary(memory: MemoryItem): boolean {
 export function formatContextMarkdown(ctx: RetrievalContext, retrieved: RetrievedContext, maxTokens?: number): string {
   const lines: string[] = ['# I-Evolve Context', ''];
 
+  const hasMemories =
+    retrieved.repo.length + retrieved.domain.length + retrieved.global.length +
+    retrieved.warnings.length + retrieved.recent.length > 0;
+
+  // Frame the block as project-level constraints, not passive background. Without
+  // an imperative lead-in this section reads as trivia and gets out-prioritized by
+  // other SessionStart injections; state up front that it must be obeyed.
+  if (hasMemories) {
+    lines.push(
+      '> 以下是本仓库沉淀的既有决策与已知陷阱,视为本仓库的项目级约束。' +
+      '在本仓库进行分析、写码、改码前必须先读完本节:**Warnings 是必须规避的 bug 模式,High Priority Memories 是必须遵循的现有实现约定**。' +
+      '与这些约束冲突的做法,除非用户明确要求,否则不得采用。',
+      '',
+    );
+  }
+
   lines.push('## Current Repository');
   if (ctx.repoId) lines.push(`- repo_id: ${ctx.repoId}`);
   if (ctx.domain) lines.push(`- domain: ${ctx.domain}`);
   lines.push('');
 
-  const renderGroup = (title: string, items: MemoryItem[]) => {
+  const renderGroup = (title: string, items: MemoryItem[], lead?: string) => {
     if (items.length === 0) return;
     lines.push(`## ${title}`);
+    if (lead) lines.push(lead, '');
     for (const m of items) {
       lines.push(`- [${m.type} | ${m.scope} | conf=${m.confidence} | id=${m.id}]`);
       lines.push(`  ${m.content.split('\n')[0]}`);
@@ -250,7 +267,7 @@ export function formatContextMarkdown(ctx: RetrievalContext, retrieved: Retrieve
   const highPriority = [...retrieved.repo, ...retrieved.domain];
   renderGroup('High Priority Memories', highPriority);
   renderGroup('Active Instincts', retrieved.global);
-  renderGroup('Warnings', retrieved.warnings);
+  renderGroup('Warnings', retrieved.warnings, '⚠️ 以下每条都是本仓库已踩过的坑,必须主动规避;改动相关代码时逐条核对。');
   renderGroup('Recent Session Summaries', retrieved.recent);
 
   const markdown = lines.join('\n').trimEnd() + '\n';
