@@ -89,6 +89,22 @@ English: Available MCP tools:
 - `explain_memory`
 - `sync_memory`
 
+### Codex MCP Usage Guidance
+
+English: Codex agents can keep I-Evolve usage lightweight enough to inject into agent context:
+
+- Call `recall` before planning non-trivial repository work so project memory can shape the plan.
+- After implementation, call `remember` for durable decisions, project conventions, architecture notes, or surprising debugging outcomes; skip transient task details.
+- Use `audit_memory` to review memory governance/history and `explain_memory` to debug why a memory was selected or how it was derived.
+- Use the other available tools above (`forget`, `search_memory`, and `sync_memory`) when removing stale memory, finding existing notes, or syncing shared memory.
+
+中文：Codex agent 可以用一段很短的 I-Evolve 工作流，并按需注入 agent context：
+
+- 在规划非平凡仓库工作前调用 `recall`，让项目记忆影响计划。
+- 实现后，只把持久决策、项目约定、架构说明或重要调试结论写入 `remember`；不要记录临时任务细节。
+- 调试 memory 行为时，用 `audit_memory` 查看治理/历史，用 `explain_memory` 查看记忆为何被选中或如何产生。
+- 需要删除过期记忆、查找现有记录或同步共享记忆时，使用上方其他工具（`forget`、`search_memory`、`sync_memory`）。
+
 ## Claude Code
 
 中文：安装 Claude Code plugin：
