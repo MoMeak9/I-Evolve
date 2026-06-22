@@ -45,6 +45,7 @@ const { positionals, values } = parseArgs({
     remote: { type: 'string' },
     'skip-remote': { type: 'boolean' },
     prompt: { type: 'string' },
+    hook: { type: 'boolean' },
   },
 });
 
