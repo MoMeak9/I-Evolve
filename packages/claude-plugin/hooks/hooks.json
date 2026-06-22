@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "i-evolve inject --format markdown"
+            "command": "i-evolve inject --format markdown --hook"
           }
         ]
       }
