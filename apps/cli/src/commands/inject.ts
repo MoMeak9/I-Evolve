@@ -15,6 +15,7 @@ function getRepo(): MarkdownMemoryRepository {
   });
 }
 
+
 export async function handleInject(flags: Record<string, unknown>): Promise<void> {
   // When invoked as a Claude Code SessionStart hook (--hook), wrap the markdown
   // in the {"hookSpecificOutput":{...}} envelope Claude Code requires; raw stdout
@@ -47,12 +48,15 @@ export async function handleInject(flags: Record<string, unknown>): Promise<void
     packageNames: detected.packageNames,
   };
 
+  const hook = Boolean(flags.hook);
+
   let repo: MarkdownMemoryRepository;
   try {
     repo = getRepo();
   } catch {
     // Fail-soft: empty context per MVP4 failure strategy.
     emit('# I-Evolve Context\n\n(no memories available)');
+
     return;
   }
 
@@ -73,6 +77,7 @@ export async function handleInject(flags: Record<string, unknown>): Promise<void
     emit(md);
   } catch {
     emit('# I-Evolve Context\n\n(retrieval failed)');
+
   } finally {
     repo.close();
   }

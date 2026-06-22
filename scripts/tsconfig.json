@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "baseUrl": "..",
+    "paths": {
+      "@i-evolve/core": ["packages/core/src/index.ts"],
+      "@i-evolve/shared": ["packages/shared/src/index.ts"],
+      "@i-evolve/schema": ["packages/schema/src/index.ts"],
+      "@i-evolve/storage": ["packages/storage/src/index.ts"],
+      "@i-evolve/daemon": ["packages/daemon/src/index.ts"],
+      "@i-evolve/git-sync": ["packages/git-sync/src/index.ts"],
+      "@i-evolve/ai-evolution": ["packages/ai-evolution/src/index.ts"]
+    }
+  },
+  "include": ["backfill-git-memory.ts", "inject-pr-candidates.ts", "diagnose-memory.ts", "backfill-static-memory.ts"]
+}

@@ -16,10 +16,24 @@ export function serializeFrontmatter(data: Record<string, unknown>): string {
   return lines.join('\n');
 }
 
+/**
+ * A bare string scalar that the reader would coerce to a non-string (number,
+ * bool, null) must be single-quoted so it round-trips as a string. Without this
+ * a sha like "4248629" or "10e3758" reads back as a number and fails the
+ * `source_refs: string[]` schema. The reader strips matching surrounding quotes.
+ */
+function serializeStringScalar(value: string): string {
+  const needsQuote =
+    value === '' ||
+    value === 'true' || value === 'false' || value === 'null' || value === '~' ||
+    /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(value.trim());
+  return needsQuote ? `'${value.replace(/'/g, "''")}'` : value;
+}
+
 function serializeField(key: string, value: unknown, indent: number): string {
   const pad = '  '.repeat(indent);
   if (value === null || value === undefined) return `${pad}${key}:`;
-  if (typeof value === 'string') return `${pad}${key}: ${value}`;
+  if (typeof value === 'string') return `${pad}${key}: ${serializeStringScalar(value)}`;
   if (typeof value === 'number' || typeof value === 'boolean') return `${pad}${key}: ${value}`;
   if (Array.isArray(value)) {
     if (value.length === 0) return `${pad}${key}: []`;
@@ -28,7 +42,7 @@ function serializeField(key: string, value: unknown, indent: number): string {
         const inner = Object.entries(v).map(([k, iv]) => serializeField(k, iv, indent + 2)).join('\n');
         return `${pad}  -\n${inner}`;
       }
-      return `${pad}  - ${v}`;
+      return `${pad}  - ${typeof v === 'string' ? serializeStringScalar(v) : v}`;
     });
     return `${pad}${key}:\n${items.join('\n')}`;
   }

@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paths } from '@i-evolve/daemon';
-import { MarkdownMemoryRepository, inferPromptIntent, recallMarkdown, detectRepoIdentity } from '@i-evolve/storage';
+import { ModelManager, createProvider, resolveProfile } from '@i-evolve/embedding';
+import { MarkdownMemoryRepository, inferPromptIntent, recallMarkdown, chunkMemory, detectRepoIdentity } from '@i-evolve/storage';
+
 
 function getRepo() {
   return new MarkdownMemoryRepository({ memoryDir: paths.shared.memory, dbPath: join(paths.base, 'shared', 'index.db') });
@@ -24,48 +25,49 @@ async function readHookStdin(): Promise<{ prompt?: string; cwd?: string }> {
   }
 }
 
-function modelRoot(model = 'BAAI/bge-m3') {
-  return join(paths.base, 'models', ...model.split('/'));
-}
-
 export async function handleModelCommand(subcommand: string | undefined, args: string[]): Promise<void> {
-  const model = args[0] === 'default' || !args[0] ? 'BAAI/bge-m3' : args[0];
+  const profileArg = args[0] && args[0].length > 0 ? args[0] : 'lite';
+  const mgr = new ModelManager();
+
   if (subcommand === 'install') {
-    const root = modelRoot(model);
-    mkdirSync(join(root, 'snapshots'), { recursive: true });
-    writeFileSync(join(root, 'model.lock.yaml'), [
-      `model_id: ${model}`,
-      'runtime: FlagEmbedding',
-      `dimension: ${model.includes('bge-m3') ? 1024 : model.includes('e5-small') ? 384 : 512}`,
-      'revision: local-placeholder',
-      `installed_at: ${new Date().toISOString()}`,
-      'device: auto',
-      'precision: fp16_if_available',
-      '',
-    ].join('\n'), 'utf-8');
-    console.log(`Default embedding model installed: ${model}`);
-    console.log('Runtime: FlagEmbedding');
-    console.log('Device: auto');
+    const spec = resolveProfile(profileArg);
+    console.log(`Installing embedding model: ${spec.modelId} (profile=${spec.profile})`);
+    console.log('Downloading weights to ~/.i-evolve/models/ (first run may take a while)...');
+    const provider = createProvider(spec.profile);
+    const [vec] = await provider.embed(['probe'], 'query');
+    mgr.writeLock(spec.profile, vec.length, 'local');
+    console.log(`Installed: ${spec.modelId}  dimension=${vec.length}  runtime=transformers.js`);
     return;
   }
+
   if (subcommand === 'status') {
-    const lockPath = join(modelRoot(), 'model.lock.yaml');
-    console.log(existsSync(lockPath) ? 'Default embedding model installed: BAAI/bge-m3' : 'Default embedding model not installed: BAAI/bge-m3');
-    console.log('Runtime: FlagEmbedding');
-    console.log('Device: auto');
+    const active = mgr.activeProfile();
+    for (const s of mgr.list()) {
+      const mark = s.profile === active ? '*' : ' ';
+      console.log(`${mark} ${s.profile.padEnd(13)} ${s.modelId.padEnd(36)} dim=${s.dimension} installed=${s.installed} active=${s.active}`);
+    }
     return;
   }
+
   if (subcommand === 'list') {
-    console.log('default  BAAI/bge-m3  dimension=1024  runtime=FlagEmbedding');
-    console.log('lite     intfloat/multilingual-e5-small  dimension=384');
-    console.log('chinese_lite  BAAI/bge-small-zh-v1.5  dimension=512');
+    for (const s of mgr.list()) {
+      console.log(`${s.profile.padEnd(13)} ${s.modelId.padEnd(36)} dimension=${s.dimension}`);
+    }
     return;
   }
+
   if (subcommand === 'switch') {
-    console.log(`Embedding model switched to ${model}. Run i-evolve index rebuild to refresh derived indexes.`);
+    const spec = resolveProfile(profileArg);
+    if (!mgr.status(spec.profile).installed) {
+      console.error(`Model not installed: ${spec.modelId}. Run: i-evolve model install ${spec.profile}`);
+      process.exit(1);
+    }
+    mgr.switch(spec.profile);
+    console.log(`Embedding model switched to ${spec.modelId}. Run 'i-evolve index rebuild' to refresh vectors.`);
     return;
   }
-  console.error('Usage: i-evolve model <install|status|list|switch> [default|model_id]');
+
+  console.error('Usage: i-evolve model <install|status|list|switch> [lite|default|chinese_lite]');
   process.exit(1);
 }
 
@@ -90,6 +92,7 @@ export async function handleRecallCommand(flags: Record<string, unknown>): Promi
     console.error('Usage: i-evolve recall --phase <session_start|user_prompt_submit> [--query <text>] [--debug]');
     process.exit(1);
   }
+  const query = (flags.query as string | undefined) ?? (flags.prompt as string | undefined);
   const repo = getRepo();
   // Resolve repo identity the same way inject does: the `pnpm -C` launcher pins
   // process.cwd() to IEVOLVE_HOME, so detect from the caller's real cwd. Prefer
@@ -98,6 +101,22 @@ export async function handleRecallCommand(flags: Record<string, unknown>): Promi
   // mismatch — recall returns "(no matching memory)".
   const invocationCwd = stdin.cwd ?? process.env.IEVOLVE_INVOCATION_CWD ?? process.cwd();
   const detected = detectRepoIdentity({ cwd: invocationCwd });
+
+  const mgr = new ModelManager();
+  const profile = mgr.activeProfile();
+  const provider = createProvider(profile);
+
+  let deps: import('@i-evolve/storage').RetrievalDeps | undefined;
+  if (query) {
+    if (await provider.isReady()) {
+      const [qv] = await provider.embed([query], 'query');
+      deps = { index: repo.getIndex(), modelId: provider.id, queryVector: qv };
+    } else {
+      console.log(`# Note: embedding model not installed. Run: i-evolve model install ${profile}`);
+      console.log('# Falling back to lexical (FTS) retrieval only.\n');
+    }
+  }
+
   const markdown = recallMarkdown(repo, phase, {
     repoId: (flags['repo-id'] as string | undefined) ?? process.env.IEVOLVE_REPO_ID ?? detected.repoId,
     domain: (flags.domain as string | undefined) ?? process.env.IEVOLVE_DOMAIN ?? detected.domain,
@@ -106,7 +125,9 @@ export async function handleRecallCommand(flags: Record<string, unknown>): Promi
   }, {
     prompt,
     debug: Boolean(flags.debug),
+    deps,
   });
+
   repo.close();
   // When invoked as a Claude Code hook (--hook), wrap the markdown in the
   // {"hookSpecificOutput":{...}} envelope; raw stdout is otherwise dropped
@@ -124,21 +145,67 @@ export async function handleRecallCommand(flags: Record<string, unknown>): Promi
 
 export async function handleIndexRuntimeCommand(subcommand: string | undefined): Promise<boolean> {
   if (subcommand === 'doctor') {
+    const mgr = new ModelManager();
+    const modelId = resolveProfile(mgr.activeProfile()).modelId;
     const repo = getRepo();
     const memories = repo.list();
+    const stats = repo.getIndex().vectorStats(modelId);
     repo.close();
     console.log('Index status: healthy');
-    console.log('Embedding model: BAAI/bge-m3');
+    console.log(`Embedding model: ${modelId}`);
     console.log(`Indexed memories: ${memories.length}`);
-    console.log(`Indexed chunks: ${memories.length * 3}`);
-    console.log('Stale chunks: 0');
-    console.log('Missing vectors: 0');
-    console.log(`BM25 docs: ${memories.length}`);
+    console.log(`Expected chunks: ${memories.length * 3}`);
+    console.log(`Vector rows: ${stats.vectors}`);
+    console.log(`Missing vectors: ${Math.max(0, memories.length * 3 - stats.vectors)}`);
     return true;
   }
-  if (['update', 'clean', 'snapshot'].includes(subcommand ?? '')) {
+
+  if (subcommand === 'rebuild' || subcommand === 'update') {
+    await vectorizeAll(subcommand === 'rebuild');
+    return true;
+  }
+
+  if (subcommand === 'clean' || subcommand === 'snapshot') {
     console.log(`Index ${subcommand} complete.`);
     return true;
   }
+
   return false;
+}
+
+async function vectorizeAll(rebuild: boolean): Promise<void> {
+  const mgr = new ModelManager();
+  const profile = mgr.activeProfile();
+  const provider = createProvider(profile);
+  if (!(await provider.isReady())) {
+    console.error(`Embedding model not installed. Run: i-evolve model install ${profile}`);
+    console.error('Skipping vectorization; FTS index is still available.');
+    return;
+  }
+  const repo = getRepo();
+  if (rebuild) repo.rebuildIndex();
+  const index = repo.getIndex();
+  const memories = repo.list({ status: 'active' });
+  const modelId = provider.id;
+  const now = new Date().toISOString();
+  let embedded = 0;
+  for (const memory of memories) {
+    const chunks = chunkMemory(memory, now, modelId);
+    const keep = chunks.map((c) => c.chunk_id);
+    const pending = rebuild
+      ? chunks
+      : chunks.filter((c) => index.getVectorHash(c.chunk_id, modelId) !== c.index.content_hash);
+    if (pending.length > 0) {
+      const vectors = await provider.embed(pending.map((c) => c.embedding_text), 'document');
+      index.upsertVectors(pending.map((c, i) => ({
+        chunkId: c.chunk_id, memoryId: c.memory_id, chunkType: c.chunk_type,
+        modelId, dimension: vectors[i].length, contentHash: c.index.content_hash,
+        vector: vectors[i], indexedAt: now,
+      })));
+      embedded += pending.length;
+    }
+    index.pruneVectors(memory.id, keep);
+  }
+  repo.close();
+  console.log(`Index ${rebuild ? 'rebuild' : 'update'} complete: ${memories.length} memories, ${embedded} chunks vectorized.`);
 }

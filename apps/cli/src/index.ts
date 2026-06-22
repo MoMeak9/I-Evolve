@@ -31,6 +31,7 @@ const { positionals, values } = parseArgs({
     to: { type: 'string' },
     'dry-run': { type: 'boolean' },
     debug: { type: 'boolean' },
+    hook: { type: 'boolean' },
     cwd: { type: 'string' },
     project: { type: 'string' },
     memory: { type: 'string' },
@@ -45,7 +46,6 @@ const { positionals, values } = parseArgs({
     remote: { type: 'string' },
     'skip-remote': { type: 'boolean' },
     prompt: { type: 'string' },
-    hook: { type: 'boolean' },
   },
 });
 

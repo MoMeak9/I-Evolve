@@ -196,6 +196,11 @@ export class MarkdownMemoryRepository {
     this.index.close();
   }
 
+  /** Access the underlying SQLite index for vector operations (upsert/query/prune vectors). */
+  getIndex(): SqliteIndex {
+    return this.index;
+  }
+
   private resolveFilePath(memory: MemoryItem): string {
     const scope = memory.scope;
     let namespace: string;

@@ -149,6 +149,14 @@ function getNextContentIndent(lines: string[], start: number): number {
 
 function parseValue(raw: string): unknown {
   const trimmed = raw.trim();
+  // Quoted scalars are always strings — strip the surrounding quotes and skip
+  // type coercion (mirrors serializeStringScalar in markdown-writer).
+  if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1).replace(/''/g, "'");
+  }
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1);
+  }
   if (trimmed === 'true') return true;
   if (trimmed === 'false') return false;
   if (trimmed === 'null' || trimmed === '~') return null;

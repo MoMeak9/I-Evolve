@@ -1,5 +1,13 @@
 import type { MemoryItem } from '@i-evolve/core';
 import type { MarkdownMemoryRepository } from './memory-repository.js';
+import type { SqliteIndex } from './sqlite-index.js';
+
+export interface RetrievalDeps {
+  index?: SqliteIndex;
+  modelId?: string;
+  /** 已 embed 的查询向量（L2 归一化）。由调用方在外层用 provider 算好传入。 */
+  queryVector?: Float32Array;
+}
 
 export interface RetrievalContext {
   repoId?: string;
@@ -66,14 +74,16 @@ export function retrieveContext(
   repo: MarkdownMemoryRepository,
   ctx: RetrievalContext,
   limits: TopKLimits = DEFAULT_LIMITS,
+  deps?: RetrievalDeps,
 ): RetrievedContext {
-  return retrieveContextDebug(repo, ctx, limits).retrieved;
+  return retrieveContextDebug(repo, ctx, limits, deps).retrieved;
 }
 
 export function retrieveContextDebug(
   repo: MarkdownMemoryRepository,
   ctx: RetrievalContext,
   limits: TopKLimits = DEFAULT_LIMITS,
+  deps?: RetrievalDeps,
 ): RetrievalDebugResult {
   const now = ctx.now ? Date.parse(ctx.now) : Date.now();
   const candidates = repo.list();
@@ -86,8 +96,8 @@ export function retrieveContextDebug(
     suppressedConflicts: 0,
     ftsMatches: 0,
   };
-  const ftsScores = buildFtsScores(repo, ctx.query);
-  stats.ftsMatches = ftsScores.size;
+  const signals = buildSignalScores(repo, ctx, deps);
+  stats.ftsMatches = signals.ftsMatches;
 
   const eligible: MemoryItem[] = [];
   for (const memory of candidates) {
@@ -106,10 +116,10 @@ export function retrieveContextDebug(
     eligible.push(memory);
   }
 
-  const { selected, conflicts } = suppressConflicts(eligible, ftsScores);
+  const { selected, conflicts } = suppressConflicts(eligible, signals.scoreFor);
   stats.suppressedConflicts = conflicts.reduce((sum, c) => sum + c.suppressedMemoryIds.length, 0);
 
-  const byScore = (a: MemoryItem, b: MemoryItem) => scoreMemory(b, ftsScores) - scoreMemory(a, ftsScores);
+  const byScore = (a: MemoryItem, b: MemoryItem) => signals.scoreFor(b) - signals.scoreFor(a);
 
   const isWarning = (m: MemoryItem) => m.type === 'pitfall';
   const isRecent = (m: MemoryItem) => isRecentSessionSummary(m);
@@ -154,7 +164,7 @@ function matchesAppliesTo(memory: MemoryItem, ctx: RetrievalContext): boolean {
   return false;
 }
 
-function suppressConflicts(memories: MemoryItem[], ftsScores: Map<string, number>): { selected: MemoryItem[]; conflicts: ConflictReport[] } {
+function suppressConflicts(memories: MemoryItem[], scoreFor: (m: MemoryItem) => number): { selected: MemoryItem[]; conflicts: ConflictReport[] } {
   const byTopic = new Map<string, MemoryItem[]>();
   for (const memory of memories) {
     const topic = conflictTopic(memory);
@@ -166,7 +176,7 @@ function suppressConflicts(memories: MemoryItem[], ftsScores: Map<string, number
   const selected: MemoryItem[] = [];
   const conflicts: ConflictReport[] = [];
   for (const [topic, group] of byTopic.entries()) {
-    const sorted = [...group].sort((a, b) => scoreMemory(b, ftsScores) - scoreMemory(a, ftsScores));
+    const sorted = [...group].sort((a, b) => scoreFor(b) - scoreFor(a));
     selected.push(sorted[0]);
     const suppressed = sorted.slice(1);
     if (suppressed.length > 0) {
@@ -189,18 +199,82 @@ function conflictTopic(memory: MemoryItem): string {
   return memory.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-function scoreMemory(memory: MemoryItem, ftsScores: Map<string, number>): number {
-  return scopePriority(memory.scope) * 100 + memory.confidence + (ftsScores.get(memory.id) ?? 0);
+interface SignalIndex {
+  ftsMatches: number;
+  scoreFor: (m: MemoryItem) => number;
 }
 
-function scopePriority(scope: MemoryItem['scope']): number {
+function buildSignalScores(repo: MarkdownMemoryRepository, ctx: RetrievalContext, deps?: RetrievalDeps): SignalIndex {
+  // lexical: FTS rank -> [0,1] min-max
+  const lexicalRaw = new Map<string, number>();
+  if (ctx.query?.trim()) {
+    try {
+      for (const r of repo.search(ctx.query)) lexicalRaw.set(r.memory.id, -r.rank);
+    } catch { /* ignore */ }
+  }
+  const lexical = minMaxNormalize(lexicalRaw);
+
+  // dense: cosine via index.queryNearest -> 每 memory 取最高 chunk 分
+  const dense = new Map<string, number>();
+  if (deps?.index && deps.modelId && deps.queryVector) {
+    for (const hit of deps.index.queryNearest(deps.queryVector, deps.modelId, 200)) {
+      const prev = dense.get(hit.memory_id) ?? -Infinity;
+      if (hit.score > prev) dense.set(hit.memory_id, hit.score);
+    }
+  }
+
+  const now = ctx.now ? Date.parse(ctx.now) : Date.now();
+  const scoreFor = (m: MemoryItem): number => {
+    const d = clamp01(dense.get(m.id) ?? 0);
+    const l = lexical.get(m.id) ?? 0;
+    const intent = intentScore(m, ctx);
+    const confidence = clamp01(m.confidence);
+    const recency = recencyScore(m, now);
+    const scope = scopeNorm(m.scope);
+    return 0.45 * d + 0.20 * l + 0.15 * intent + 0.10 * confidence + 0.05 * recency + 0.05 * scope;
+  };
+
+  return { ftsMatches: lexicalRaw.size, scoreFor };
+}
+
+function minMaxNormalize(raw: Map<string, number>): Map<string, number> {
+  const out = new Map<string, number>();
+  if (raw.size === 0) return out;
+  const vals = [...raw.values()];
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = max - min || 1;
+  for (const [k, v] of raw) out.set(k, (v - min) / span);
+  return out;
+}
+
+function intentScore(m: MemoryItem, ctx: RetrievalContext): number {
+  let s = 0;
+  if (ctx.domain && m.domain === ctx.domain) s += 0.5;
+  const q = (ctx.query ?? '').toLowerCase();
+  if (q && m.tags.some((t) => q.includes(t.toLowerCase()))) s += 0.5;
+  return clamp01(s);
+}
+
+function recencyScore(m: MemoryItem, now: number): number {
+  const updated = Date.parse(m.updatedAt);
+  if (Number.isNaN(updated)) return 0;
+  const days = Math.max(0, (now - updated) / 86_400_000);
+  return Math.exp(-days / 30);
+}
+
+function scopeNorm(scope: MemoryItem['scope']): number {
   switch (scope) {
-    case 'repo': return 6;
-    case 'domain': return 4;
-    case 'global': return 2;
-    case 'task': return 7;
+    case 'task': return 1;
+    case 'repo': return 0.8;
+    case 'domain': return 0.5;
+    case 'global': return 0.3;
     default: return 0;
   }
+}
+
+function clamp01(x: number): number {
+  return x < 0 ? 0 : x > 1 ? 1 : x;
 }
 
 function globMatch(pattern: string, value: string): boolean {
@@ -210,19 +284,6 @@ function globMatch(pattern: string, value: string): boolean {
     .replace(/\*/g, '[^/]*')
     .replace(/\u0000/g, '.*');
   return new RegExp(`^${escaped}$`).test(value);
-}
-
-function buildFtsScores(repo: MarkdownMemoryRepository, query: string | undefined): Map<string, number> {
-  const scores = new Map<string, number>();
-  if (!query?.trim()) return scores;
-  try {
-    for (const result of repo.search(query)) {
-      scores.set(result.memory.id, Math.max(0, -result.rank) + 25);
-    }
-  } catch {
-    return scores;
-  }
-  return scores;
 }
 
 function isRecentSessionSummary(memory: MemoryItem): boolean {

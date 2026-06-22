@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { MarkdownMemoryRepository } from './memory-repository.js';
 import { retrieveContext, formatContextMarkdown, retrieveContextDebug } from './context-retrieval.js';
+import { SqliteIndex } from './sqlite-index.js';
 
 const testDir = join('/tmp', `ie-ctx-${randomBytes(4).toString('hex')}`);
 let repo: MarkdownMemoryRepository;
@@ -190,5 +191,39 @@ describe('retrieveContext', () => {
       'repo.acme-demo.react-build',
     ]);
     expect(result.conflicts).toHaveLength(0);
+  });
+
+  it('blends dense vector signal into hybrid score (spec formula)', () => {
+    repo.create({
+      id: 'repo.acme-demo.alpha', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
+      title: 'Alpha', content: 'alpha content', status: 'active', visibility: 'team',
+      confidence: 0.5, tags: [], sourceRefs: [],
+    });
+    repo.create({
+      id: 'repo.acme-demo.beta', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
+      title: 'Beta', content: 'beta content', status: 'active', visibility: 'team',
+      confidence: 0.5, tags: [], sourceRefs: [],
+    });
+    const index = new SqliteIndex(join(testDir, 'index.db'));
+    index.upsertVectors([
+      { chunkId: 'a1', memoryId: 'repo.acme-demo.alpha', chunkType: 'semantic', modelId: 'lite', dimension: 2, contentHash: 'h', vector: new Float32Array([1, 0]), indexedAt: '2026-06-18T00:00:00.000Z' },
+      { chunkId: 'b1', memoryId: 'repo.acme-demo.beta', chunkType: 'semantic', modelId: 'lite', dimension: 2, contentHash: 'h', vector: new Float32Array([0, 1]), indexedAt: '2026-06-18T00:00:00.000Z' },
+    ]);
+    const result = retrieveContextDebug(repo, { repoId: 'acme/demo' }, undefined, {
+      index, modelId: 'lite', queryVector: new Float32Array([1, 0]),
+    });
+    index.close();
+    const repoIds = result.retrieved.repo.map((m) => m.id);
+    expect(repoIds[0]).toBe('repo.acme-demo.alpha');
+  });
+
+  it('degrades to non-dense ordering when no provider/vector given', () => {
+    repo.create({
+      id: 'repo.acme-demo.x', type: 'repo_fact', scope: 'repo', repoId: 'acme/demo',
+      title: 'X', content: 'x', status: 'active', visibility: 'team',
+      confidence: 0.9, tags: [], sourceRefs: [],
+    });
+    const result = retrieveContextDebug(repo, { repoId: 'acme/demo' });
+    expect(result.retrieved.repo.map((m) => m.id)).toContain('repo.acme-demo.x');
   });
 });

@@ -15,6 +15,7 @@
     "@i-evolve/core": "workspace:*",
     "@i-evolve/dashboard": "workspace:*",
     "@i-evolve/daemon": "workspace:*",
+    "@i-evolve/embedding": "workspace:*",
     "@i-evolve/git-sync": "workspace:*",
     "@i-evolve/mcp-server": "workspace:*",
     "@i-evolve/schema": "workspace:*",

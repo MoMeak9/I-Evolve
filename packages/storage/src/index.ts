@@ -6,7 +6,7 @@ export { parseMemoryFile, parseMemoryMarkdown } from './markdown-reader.js';
 export type { ParsedMemoryFile } from './markdown-reader.js';
 export { retrieveContext, formatContextMarkdown } from './context-retrieval.js';
 export { retrieveContextDebug } from './context-retrieval.js';
-export type { RetrievalContext, RetrievedContext, TopKLimits, ConflictReport, RetrievalDebugResult, RetrievalDebugStats } from './context-retrieval.js';
+export type { RetrievalContext, RetrievedContext, TopKLimits, ConflictReport, RetrievalDebugResult, RetrievalDebugStats, RetrievalDeps } from './context-retrieval.js';
 export { detectRepoIdentity, detectProjectIdentity, normalizeGitRemoteUrl } from './project-identity.js';
 export type { RepoIdentity, ProjectIdentity, DetectRepoIdentityInput, DetectProjectIdentityInput } from './project-identity.js';
 
