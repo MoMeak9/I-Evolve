@@ -1,16 +1,31 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { CandidateMemory, SessionSummary } from '@i-evolve/core';
 import type { AiProvider } from '../provider/AiProvider.js';
 import { extractJson } from '../json-utils.js';
 import { containsSecret, containsPii } from '../redaction.js';
 
-const SYSTEM = `You are I-Evolve's memory candidate extractor. Return ONLY a JSON array of candidate memories with keys: title, type, proposedScope, content, evidence, sourceRefs, confidence, riskFlags. Avoid promoting single-task constraints to global. No secrets, PII, or raw code.`;
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROMPTS_DIR = join(__dirname, '..', 'prompts');
+
+function loadPrompt(name: string): string {
+  return readFileSync(join(PROMPTS_DIR, name), 'utf-8');
+}
+
+const SYSTEM = loadPrompt('memory-extractor.prompt.md');
+const ENUM_CONTRACT = loadPrompt('enum-contract.md');
 
 export class MemoryCandidateExtractor {
   constructor(private provider: AiProvider) {}
 
   async extract(summary: SessionSummary): Promise<CandidateMemory[]> {
     const prompt = buildPrompt(summary);
-    const { text } = await this.provider.complete({ system: SYSTEM, prompt, temperature: 0.2 });
+    const { text } = await this.provider.complete({
+      system: SYSTEM + '\n\n' + ENUM_CONTRACT,
+      prompt,
+      temperature: 0.2,
+    });
     const raw = extractJson<Partial<CandidateMemory>[]>(text);
     if (!Array.isArray(raw)) return [];
 

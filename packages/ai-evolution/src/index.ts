@@ -2,6 +2,10 @@ export type { AiProvider, AiCompleteInput, AiCompleteOutput } from './provider/A
 export { MockAiProvider } from './provider/mock-provider.js';
 export { OpenAiCompatibleProvider } from './provider/openai-compatible-provider.js';
 export type { OpenAiCompatibleConfig } from './provider/openai-compatible-provider.js';
+export { ClaudeCliProvider } from './provider/claude-cli-provider.js';
+export { CodexCliProvider } from './provider/codex-cli-provider.js';
+export { getProvider } from './provider/get-provider.js';
+export { firstBalancedJson } from './provider/json-extract.js';
 
 export { SessionSummarizer } from './extractor/SessionSummarizer.js';
 export type { SummarizeInput } from './extractor/SessionSummarizer.js';

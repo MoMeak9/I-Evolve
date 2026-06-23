@@ -6,24 +6,10 @@ import {
   SessionSummarizer,
   SessionStore,
   EvolutionPipeline,
-  MockAiProvider,
-  OpenAiCompatibleProvider,
-  type AiProvider,
+  getProvider,
   type CreateMemoryFromDecisionInput,
 } from '@i-evolve/ai-evolution';
 import type { Observation, AuditAction } from '@i-evolve/core';
-
-function getProvider(): AiProvider {
-  const baseUrl = process.env.IEVOLVE_AI_BASE_URL;
-  const apiKey = process.env.IEVOLVE_AI_API_KEY;
-  const model = process.env.IEVOLVE_AI_MODEL;
-  if (baseUrl && apiKey && model) {
-    return new OpenAiCompatibleProvider({ baseUrl, apiKey, model });
-  }
-  const mock = new MockAiProvider();
-  mock.setDefault('{"summary":"Session completed.","decisions":[],"constraints":[],"mistakes":[],"userCorrections":[],"filesTouched":[],"candidateMemoryHints":[],"candidateInstinctHints":[]}');
-  return mock;
-}
 
 function readObservations(sessionId: string): Observation[] {
   const file = paths.observations.current;

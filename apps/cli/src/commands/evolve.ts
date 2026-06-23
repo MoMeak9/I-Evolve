@@ -3,11 +3,9 @@ import { existsSync, readFileSync, readdirSync, appendFileSync, mkdirSync } from
 import { paths } from '@i-evolve/daemon';
 import { MarkdownMemoryRepository } from '@i-evolve/storage';
 import {
-  MockAiProvider,
-  OpenAiCompatibleProvider,
   EvolutionPipeline,
   SessionStore,
-  type AiProvider,
+  getProvider,
   type CreateMemoryFromDecisionInput,
 } from '@i-evolve/ai-evolution';
 import type { AuditAction } from '@i-evolve/core';
@@ -17,19 +15,6 @@ function getRepo(): MarkdownMemoryRepository {
     memoryDir: paths.shared.memory,
     dbPath: join(paths.base, 'shared', 'index.db'),
   });
-}
-
-function getProvider(): AiProvider {
-  const baseUrl = process.env.IEVOLVE_AI_BASE_URL;
-  const apiKey = process.env.IEVOLVE_AI_API_KEY;
-  const model = process.env.IEVOLVE_AI_MODEL;
-  if (baseUrl && apiKey && model) {
-    return new OpenAiCompatibleProvider({ baseUrl, apiKey, model });
-  }
-  // Offline default: produces no candidates.
-  const mock = new MockAiProvider();
-  mock.setDefault('[]');
-  return mock;
 }
 
 function appendAudit(action: AuditAction): void {

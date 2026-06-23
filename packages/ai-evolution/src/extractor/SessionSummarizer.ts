@@ -1,10 +1,21 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Observation, SessionSummary } from '@i-evolve/core';
 import type { ObservationSensitivity } from '@i-evolve/shared';
 import type { AiProvider } from '../provider/AiProvider.js';
 import { redact } from '../redaction.js';
 import { extractJson } from '../json-utils.js';
 
-const SESSION_SUMMARY_SYSTEM = `You are I-Evolve's session summarizer. Return ONLY a JSON object with keys: summary, decisions, constraints, mistakes, userCorrections, filesTouched, candidateMemoryHints, candidateInstinctHints. Be factual. No secrets or raw code.`;
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROMPTS_DIR = join(__dirname, '..', 'prompts');
+
+function loadPrompt(name: string): string {
+  return readFileSync(join(PROMPTS_DIR, name), 'utf-8');
+}
+
+const SESSION_SUMMARY_SYSTEM = loadPrompt('session-summary.prompt.md');
+const ENUM_CONTRACT = loadPrompt('enum-contract.md');
 
 interface SummaryModelOutput {
   summary: string;
@@ -34,7 +45,6 @@ export class SessionSummarizer {
   async summarize(input: SummarizeInput): Promise<SessionSummary> {
     const sensitivity = highestSensitivity(input.observations);
 
-    // Only send non-sensitive material to the provider; redact the rest.
     const safeObservations = input.observations
       .filter((o) => o.sensitivity !== 'sensitive')
       .map((o) => ({
@@ -47,7 +57,7 @@ export class SessionSummarizer {
 
     const prompt = `Observations:\n${JSON.stringify(safeObservations, null, 2)}`;
     const { text } = await this.provider.complete({
-      system: SESSION_SUMMARY_SYSTEM,
+      system: SESSION_SUMMARY_SYSTEM + '\n\n' + ENUM_CONTRACT,
       prompt,
       temperature: 0.2,
     });
