@@ -30,6 +30,7 @@ export interface SessionStartInput {
 
 export interface SessionFinalizeInput {
   sessionId: string;
+  autoEvolve?: boolean;
 }
 
 export interface MemoryRecallInput {
