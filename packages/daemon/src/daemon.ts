@@ -1,5 +1,10 @@
-import { mkdirSync, existsSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, appendFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { paths } from './paths.js';
+import { UnifiedExtractor, getProvider, SessionStore, PolicyJudge } from '@i-evolve/ai-evolution';
+import { MarkdownMemoryRepository } from '@i-evolve/storage';
+import { AsyncFinalizer } from './async-finalizer.js';
+import type { Observation } from '@i-evolve/core';
 import { ProcessLock } from './lock.js';
 import { IpcServer, type RequestHandler } from './ipc-server.js';
 import { ObservationWriter } from './observation-writer.js';
@@ -85,8 +90,11 @@ export class Daemon {
       case 'session.start':
         return { ok: true, data: { sessionId: req.payload.sessionId } };
 
-      case 'session.finalize':
-        return { ok: true, data: { sessionId: req.payload.sessionId } };
+      case 'session.finalize': {
+        const { sessionId, autoEvolve } = req.payload;
+        setImmediate(() => this.runAsyncFinalize(sessionId, autoEvolve ?? false));
+        return { ok: true, data: { queued: true, sessionId } };
+      }
 
       case 'memory.recall':
         return this.handleMemoryRead(() => this.memory.recall(req.payload));
@@ -136,6 +144,61 @@ export class Daemon {
         };
     }
   };
+
+  private async runAsyncFinalize(sessionId: string, autoEvolve: boolean): Promise<void> {
+    const observations = this.readObservationsForSession(sessionId);
+    if (observations.length === 0) return;
+
+    const provider = getProvider();
+    const extractor = new UnifiedExtractor(provider);
+    const judge = new PolicyJudge();
+    const store = new SessionStore(paths.sessions.dir);
+
+    const repo = new MarkdownMemoryRepository({
+      memoryDir: paths.shared.memory,
+      dbPath: join(paths.base, 'shared', 'index.db'),
+    });
+
+    const finalizer = new AsyncFinalizer({
+      extract: (obs, sid, rid) => extractor.extract(obs, sid, rid),
+      saveSession: (summary) => store.save(summary),
+      countCandidatesBySlug: (slug) => repo.countCandidatesBySlug(slug),
+      createMemory: (input) => repo.create(input),
+      promoteCandidatesBySlug: (slug, content, newId) => repo.promoteCandidatesBySlug(slug, content, newId),
+      appendAudit: (action) => {
+        const dir = paths.audit.dir;
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+        const month = new Date(action.createdAt).toISOString().slice(0, 7);
+        appendFileSync(join(dir, `${month}.jsonl`), JSON.stringify(action) + '\n', 'utf-8');
+      },
+      judgeCandidate: (candidate) => judge.judge(candidate),
+      logWarning: (msg) => {
+        const logDir = paths.logs.dir;
+        if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+        appendFileSync(join(logDir, 'async-finalizer.log'), `[${new Date().toISOString()}] WARN: ${msg}\n`, 'utf-8');
+      },
+    });
+
+    try {
+      await finalizer.finalize(observations, sessionId);
+    } finally {
+      repo.close();
+    }
+  }
+
+  private readObservationsForSession(sessionId: string): Observation[] {
+    const file = paths.observations.current;
+    if (!existsSync(file)) return [];
+    const observations: Observation[] = [];
+    for (const line of readFileSync(file, 'utf-8').split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const obs = JSON.parse(line) as Observation;
+        if (obs.sessionId === sessionId) observations.push(obs);
+      } catch { /* skip malformed lines */ }
+    }
+    return observations;
+  }
 
   private async handleMemoryRead<T>(fn: () => T | Promise<T>): Promise<DaemonResponse<T>> {
     try {
