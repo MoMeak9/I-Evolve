@@ -11,6 +11,8 @@ export { SessionSummarizer } from './extractor/SessionSummarizer.js';
 export type { SummarizeInput } from './extractor/SessionSummarizer.js';
 export { MemoryCandidateExtractor } from './extractor/MemoryCandidateExtractor.js';
 export { InstinctCandidateExtractor } from './extractor/InstinctCandidateExtractor.js';
+export { UnifiedExtractor } from './extractor/UnifiedExtractor.js';
+export type { UnifiedExtractionResult } from './extractor/UnifiedExtractor.js';
 
 export { PolicyJudge } from './judge/PolicyJudge.js';
 export { runPolicyChecks } from './judge/policy-checks.js';
