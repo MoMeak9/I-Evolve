@@ -12,7 +12,6 @@ export class ClaudeCliProvider implements AiProvider {
         '-p',
         '--model', this.model,
         '--output-format', 'text',
-        '--allowed-tools', '',
         '--system-prompt', input.system,
       ],
       {
