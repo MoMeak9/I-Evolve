@@ -201,6 +201,44 @@ export class MarkdownMemoryRepository {
     return this.index;
   }
 
+  countCandidatesBySlug(titleSlug: string): number {
+    return this.index.countByTitleSlug(titleSlug, 'candidate');
+  }
+
+  promoteCandidatesBySlug(titleSlug: string, latestContent: string, newId: string): MemoryItem | null {
+    const candidates = this.index.listByTitleSlug(titleSlug, 'candidate');
+    if (candidates.length === 0) return null;
+
+    const template = this.get(candidates[0].id);
+    if (!template) return null;
+
+    // Mark all existing candidates as rejected (candidate → rejected is a valid transition)
+    for (const c of candidates) {
+      const item = this.get(c.id);
+      if (item && item.status === 'candidate') {
+        this.changeStatus(c.id, 'rejected', { expectedRevision: c.revision });
+      }
+    }
+
+    // Create new active memory with latest content
+    return this.create({
+      id: newId,
+      type: template.type,
+      scope: template.scope,
+      title: template.title,
+      content: latestContent,
+      status: 'active',
+      visibility: 'private',
+      confidence: Math.min(template.confidence + 0.1, 1.0),
+      ttlDays: template.ttlDays ?? null,
+      expiresAt: template.expiresAt ?? null,
+      tags: template.tags,
+      sourceRefs: template.sourceRefs,
+      repoId: template.repoId,
+      domain: template.domain,
+    });
+  }
+
   private resolveFilePath(memory: MemoryItem): string {
     const scope = memory.scope;
     let namespace: string;

@@ -208,6 +208,20 @@ export class SqliteIndex {
     return scored.slice(0, topN);
   }
 
+  countByTitleSlug(titleSlug: string, status: string): number {
+    const rows = this.db.prepare(
+      `SELECT title FROM memories WHERE status = ?`
+    ).all(status) as Array<{ title: string }>;
+    return rows.filter((r) => slugifyTitle(r.title) === titleSlug).length;
+  }
+
+  listByTitleSlug(titleSlug: string, status: string): Array<{ id: string; title: string; revision: number; content_hash: string }> {
+    const rows = this.db.prepare(
+      `SELECT id, title, revision, content_hash FROM memories WHERE status = ? ORDER BY updated_at DESC`
+    ).all(status) as Array<{ id: string; title: string; revision: number; content_hash: string }>;
+    return rows.filter((r) => slugifyTitle(r.title) === titleSlug);
+  }
+
   vectorStats(modelId: string): { vectors: number } {
     const row = this.db.prepare('SELECT COUNT(*) AS n FROM chunk_vectors WHERE model_id = ?').get(modelId) as { n: number };
     return { vectors: row.n };
@@ -220,4 +234,8 @@ export class SqliteIndex {
   close(): void {
     this.db.close();
   }
+}
+
+function slugifyTitle(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
