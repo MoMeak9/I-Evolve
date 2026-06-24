@@ -13,6 +13,8 @@ import { SerialTransactionManager } from './transaction-manager.js';
 import type { DaemonRequest, DaemonResponse } from './ipc-types.js';
 import { DaemonMemoryService } from './memory-service.js';
 import { IEvolveError } from '@i-evolve/shared';
+import { AutoPushService } from './auto-push-service.js';
+import { GitMemorySync } from '@i-evolve/git-sync';
 
 export class Daemon {
   private lock = new ProcessLock();
@@ -23,9 +25,17 @@ export class Daemon {
   private txManager = new SerialTransactionManager();
   private startedAt: string | null = null;
   private signalHandler = () => void this.stop();
+  private autoPush: AutoPushService;
 
   constructor() {
     this.ipc = new IpcServer(this.handleRequest.bind(this));
+    const gitSync = new GitMemorySync(paths.shared.memory);
+    this.autoPush = new AutoPushService(
+      gitSync,
+      join(paths.shared.memory, 'memory-pack.yaml'),
+      join(paths.shared.memory, '.pending-push.json'),
+      (action) => this.audit.append(action),
+    );
   }
 
   async start(): Promise<void> {
@@ -43,6 +53,7 @@ export class Daemon {
 
     await this.ipc.start();
     this.startedAt = new Date().toISOString();
+    this.autoPush.flush().catch(() => {});
 
     process.on('SIGTERM', this.signalHandler);
     process.on('SIGINT', this.signalHandler);
@@ -177,10 +188,12 @@ export class Daemon {
         if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
         appendFileSync(join(logDir, 'async-finalizer.log'), `[${new Date().toISOString()}] WARN: ${msg}\n`, 'utf-8');
       },
+      onPromoted: (memory) => this.autoPush.onPromoted(memory),
     });
 
     try {
       await finalizer.finalize(observations, sessionId);
+      await this.autoPush.flush();
     } finally {
       repo.close();
     }
