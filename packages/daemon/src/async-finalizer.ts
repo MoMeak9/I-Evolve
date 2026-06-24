@@ -11,6 +11,7 @@ export interface AsyncFinalizerDeps {
   appendAudit: (action: AuditAction) => void;
   judgeCandidate: (candidate: CandidateMemory) => PolicyDecision;
   logWarning?: (message: string) => void;
+  onPromoted?: (memory: { id: string; visibility: string }) => Promise<void>;
 }
 
 const PROMOTION_THRESHOLD = 3;
@@ -79,6 +80,7 @@ export class AsyncFinalizer {
 
       if (existingCount >= PROMOTION_THRESHOLD - 1) {
         this.deps.promoteCandidatesBySlug(slug, candidate.content, id);
+        await this.deps.onPromoted?.({ id, visibility: 'private' });
       } else {
         this.deps.createMemory({
           id,

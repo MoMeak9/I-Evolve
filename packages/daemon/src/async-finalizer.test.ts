@@ -107,6 +107,23 @@ describe('AsyncFinalizer', () => {
     expect(deps.createMemory).not.toHaveBeenCalled();
   });
 
+  it('calls onPromoted callback after promotion', async () => {
+    const onPromoted = vi.fn();
+    const deps = makeDeps({
+      countCandidatesBySlug: vi.fn().mockReturnValue(2),
+      onPromoted,
+    });
+    const finalizer = new AsyncFinalizer(deps);
+
+    await finalizer.finalize([obs], 'sess-1', 'acme/demo');
+
+    expect(onPromoted).toHaveBeenCalledOnce();
+    expect(onPromoted).toHaveBeenCalledWith({
+      id: expect.stringContaining('use-ssr-for-dashboard'),
+      visibility: 'private',
+    });
+  });
+
   it('retries on failure up to 2 times', async () => {
     vi.useFakeTimers();
 
