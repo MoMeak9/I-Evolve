@@ -50,6 +50,9 @@ export type AuditActionType =
   | 'checkout'
   | 'sync_pull'
   | 'sync_push'
+  | 'auto_push_success'
+  | 'auto_push_failed'
+  | 'auto_push_abandoned'
   | 'migrate'
   | 'scope_downgrade'
   | 'confidence_update';
