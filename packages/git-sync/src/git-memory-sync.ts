@@ -149,6 +149,16 @@ export class GitMemorySync {
     return existsSync(`${this.repoDir}/.git`);
   }
 
+  hasRemote(): boolean {
+    if (!this.isInitialized()) return false;
+    try {
+      const remotes = git(this.repoDir, ['remote']);
+      return remotes.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   status(): { clean: boolean; commit: string; branch: string } {
     return {
       clean: isClean(this.repoDir),
