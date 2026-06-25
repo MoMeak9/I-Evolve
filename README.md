@@ -12,9 +12,17 @@ I-Evolve is a local-first, daemon-backed memory system for coding agents. It exp
 
 ### 交互式引导（推荐）/ Guided Setup (Recommended)
 
-中文：如果你已安装 Claude Code 并 clone 了本仓库，可以直接使用 setup skill 完成全部配置：
+中文：只需 clone 仓库并用 Claude Code 打开，agent 会自动读取 CLAUDE.md 并引导完成全部安装配置（包括 Node.js/nvm 环境）。你也可以主动告诉 agent：
 
-English: If you have Claude Code installed and have cloned this repo, use the setup skill for a fully guided experience:
+English: Just clone the repo and open it with Claude Code — the agent will read CLAUDE.md and guide you through the full setup (including Node.js/nvm if needed). You can also explicitly tell the agent:
+
+```text
+帮我按照 packages/claude-plugin/skills/setup/SKILL.md 完成安装
+```
+
+安装完成并重启 Claude Code 后，后续可直接使用：
+
+After setup is complete and Claude Code is restarted, you can use the skill directly:
 
 ```bash
 /i-evolve:setup
@@ -76,7 +84,6 @@ Preview without writing / 仅预览不写入：
 ```bash
 pnpm tsx apps/cli/src/index.ts setup all --dry-run
 ```
-
 
 ## 本地召回与 Embedding / Local Retrieval & Embedding
 
