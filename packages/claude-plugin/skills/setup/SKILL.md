@@ -6,11 +6,14 @@ description: End-to-end I-Evolve setup — from git clone through configuration 
 # I-Evolve: End-to-End Setup
 
 Guide a user through the complete I-Evolve installation and configuration.
-Execute steps sequentially. Stop on failure or when user input is required.
+Execute steps sequentially. **Each step starts with a detection check — skip if already satisfied.**
+Stop on failure or when user input is required.
 
-## Step 0: Clone (skip if already in the repo)
+## Step 0: Clone
 
-If not already inside the I-Evolve repo:
+**Check:** `ls packages/claude-plugin/skills/setup/SKILL.md` succeeds (already in repo).
+
+If not in the I-Evolve repo:
 
 ```bash
 git clone https://github.com/MoMeak9/I-Evolve.git
@@ -19,36 +22,32 @@ cd I-Evolve
 
 ## Step 1: Prerequisites
 
-Check Node.js and pnpm:
+**Check all at once:**
 
 ```bash
+command -v nvm 2>/dev/null || [ -s "$HOME/.nvm/nvm.sh" ] && echo "nvm: installed"
 command -v node && node --version
 command -v pnpm && pnpm --version
 ```
 
-### If Node.js is missing or below v20:
+### nvm — skip if already installed or Node >= 20 is available
 
-Install nvm first, then use it to install Node.js:
+If Node.js >= 20 is already available (regardless of how it was installed), skip nvm entirely.
+Only install nvm if Node.js is missing or below v20:
 
 ```bash
-# Install nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-
-# Load nvm into current shell
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-
-# Install and use Node.js 20
 nvm install 20
 nvm use 20
 ```
 
-Verify after installation:
-```bash
-node --version  # should be v20.x+
-```
+### Node.js — skip if `node --version` shows v20+
 
-### If pnpm is missing:
+Already handled by nvm above, or user's system Node.
+
+### pnpm — skip if `pnpm --version` succeeds
 
 ```bash
 npm install -g pnpm@9
@@ -56,14 +55,23 @@ npm install -g pnpm@9
 
 ## Step 2: Install & Build
 
+**Check:** `ls dist/` in any built package (e.g. `ls packages/shared/dist/`) to see if already built.
+
+If `node_modules/` is missing:
 ```bash
 pnpm install
+```
+
+If `dist/` directories are missing or stale:
+```bash
 pnpm build
 ```
 
 If build fails, run `pnpm typecheck` to surface errors and stop.
 
 ## Step 3: Register Plugin
+
+**Check:** `ls ~/.claude/plugins/i-evolve/.claude-plugin/plugin.json` — skip if exists.
 
 ```bash
 pnpm tsx apps/cli/src/index.ts setup all --project-root .
@@ -75,9 +83,11 @@ This registers:
 
 ## Step 4: Configure Sync Settings
 
+**Check:** `cat ~/.i-evolve/shared/memory/memory-pack.yaml` — if file exists and has `push_repos`, show current config and ask if user wants to modify. Skip write if unchanged.
+
 The config file lives at `~/.i-evolve/shared/memory/memory-pack.yaml`.
 
-Ask the user these questions:
+If file is missing or needs configuration, ask the user:
 
 1. **Repo whitelist** — Which repos should trigger auto-push when their memories are promoted?
    - Format: short repo directory names (e.g. `app-kntr`, `MoMeak9-I-Evolve`)
@@ -105,7 +115,9 @@ Replace placeholders with user's answers.
 
 ## Step 5: Embedding Model
 
-Ask the user whether to download the local embedding model now.
+**Check:** `pnpm tsx apps/cli/src/index.ts model status` — if a model shows `installed: true`, skip.
+
+If no model is installed, ask the user whether to download now.
 
 Available profiles:
 - `lite` — `Xenova/multilingual-e5-small` (384d, ~90MB, fast)
@@ -129,6 +141,8 @@ Without a model, vector search is unavailable but FTS still works.
 
 ## Step 6: Initialize SQLite Index
 
+**Check:** `ls ~/.i-evolve/index.db` — if exists, run doctor to verify integrity instead of full bootstrap.
+
 The SQLite database is auto-created on first daemon start at `~/.i-evolve/index.db`.
 Verify it was created and bootstrap the index from existing memory files:
 
@@ -148,6 +162,8 @@ cd node_modules/better-sqlite3 && npx prebuild-install || npm run build-release
 
 ## Step 7: Start Daemon
 
+**Check:** `pnpm tsx apps/cli/src/index.ts daemon status` — skip if already running.
+
 ```bash
 pnpm tsx apps/cli/src/index.ts daemon start
 ```
@@ -159,6 +175,8 @@ pnpm tsx apps/cli/src/index.ts daemon start
 ```
 
 ## Step 8: Bind Project Identity
+
+**Check:** `pnpm tsx apps/cli/src/index.ts identity detect` — if project is already bound (identity file exists), show current binding and ask if user wants to re-bind. Skip if confirmed unchanged.
 
 Detect the current repo:
 
