@@ -26,38 +26,40 @@ function makeMockGitSync(overrides: Partial<any> = {}) {
 describe('AutoPushService', () => {
   beforeEach(() => {
     vi.mocked(existsSync).mockReturnValue(false);
-    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: true });
+    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: true, pushRepos: ['*'] });
   });
   afterEach(() => vi.resetAllMocks());
 
-  it('pushes when auto_push=true, visibility=team, remote exists', async () => {
+  it('pushes when auto_push=true, visibility=team, remote exists, repo allowed', async () => {
+    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: true, pushRepos: ['my-repo'] });
     const gitSync = makeMockGitSync();
     const appendAudit = vi.fn();
     const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
 
-    await svc.onPromoted({ id: 'test-1', visibility: 'team' });
+    await svc.onPromoted({ id: 'repo.my-repo.some-slug', visibility: 'team' });
 
     expect(gitSync.push).toHaveBeenCalledOnce();
     expect(appendAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'auto_push_success' }));
   });
 
   it('also pushes for visibility=public', async () => {
+    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: true, pushRepos: ['my-repo'] });
     const gitSync = makeMockGitSync();
     const appendAudit = vi.fn();
     const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
 
-    await svc.onPromoted({ id: 'test-1', visibility: 'public' });
+    await svc.onPromoted({ id: 'repo.my-repo.some-slug', visibility: 'public' });
 
     expect(gitSync.push).toHaveBeenCalledOnce();
   });
 
   it('skips when auto_push=false', async () => {
-    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: false });
+    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: false, pushRepos: ['*'] });
     const gitSync = makeMockGitSync();
     const appendAudit = vi.fn();
     const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
 
-    await svc.onPromoted({ id: 'test-1', visibility: 'team' });
+    await svc.onPromoted({ id: 'repo.my-repo.slug', visibility: 'team' });
 
     expect(gitSync.push).not.toHaveBeenCalled();
   });
@@ -67,7 +69,7 @@ describe('AutoPushService', () => {
     const appendAudit = vi.fn();
     const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
 
-    await svc.onPromoted({ id: 'test-1', visibility: 'private' });
+    await svc.onPromoted({ id: 'repo.my-repo.slug', visibility: 'private' });
 
     expect(gitSync.push).not.toHaveBeenCalled();
   });
@@ -77,32 +79,78 @@ describe('AutoPushService', () => {
     const appendAudit = vi.fn();
     const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
 
-    await svc.onPromoted({ id: 'test-1', visibility: 'team' });
+    await svc.onPromoted({ id: 'repo.my-repo.slug', visibility: 'team' });
 
     expect(gitSync.push).not.toHaveBeenCalled();
   });
 
+  it('skips when push_repos is empty', async () => {
+    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: true, pushRepos: [] });
+    const gitSync = makeMockGitSync();
+    const appendAudit = vi.fn();
+    const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
+
+    await svc.onPromoted({ id: 'repo.my-repo.slug', visibility: 'team' });
+
+    expect(gitSync.push).not.toHaveBeenCalled();
+  });
+
+  it('skips when repo not in whitelist', async () => {
+    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: true, pushRepos: ['app-kntr'] });
+    const gitSync = makeMockGitSync();
+    const appendAudit = vi.fn();
+    const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
+
+    await svc.onPromoted({ id: 'repo.other-repo.slug', visibility: 'team' });
+
+    expect(gitSync.push).not.toHaveBeenCalled();
+  });
+
+  it('skips when memory id is domain scope', async () => {
+    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: true, pushRepos: ['my-repo'] });
+    const gitSync = makeMockGitSync();
+    const appendAudit = vi.fn();
+    const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
+
+    await svc.onPromoted({ id: 'domain.frontend.slug', visibility: 'team' });
+
+    expect(gitSync.push).not.toHaveBeenCalled();
+  });
+
+  it('pushes all repos when whitelist contains *', async () => {
+    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: true, pushRepos: ['*'] });
+    const gitSync = makeMockGitSync();
+    const appendAudit = vi.fn();
+    const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
+
+    await svc.onPromoted({ id: 'repo.any-repo.slug', visibility: 'team' });
+
+    expect(gitSync.push).toHaveBeenCalledOnce();
+  });
+
   it('enqueues on push failure', async () => {
+    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: true, pushRepos: ['my-repo'] });
     const gitSync = makeMockGitSync({
       push: vi.fn().mockResolvedValue({ ok: false, message: 'validation failed' }),
     });
     const appendAudit = vi.fn();
     const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
 
-    await svc.onPromoted({ id: 'test-1', visibility: 'team' });
+    await svc.onPromoted({ id: 'repo.my-repo.slug', visibility: 'team' });
 
     expect(writeFileSync).toHaveBeenCalledWith(
       '/mem/.pending-push.json',
-      expect.stringContaining('test-1'),
+      expect.stringContaining('repo.my-repo.slug'),
       'utf-8',
     );
     expect(appendAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'auto_push_failed' }));
   });
 
   it('does not enqueue duplicate memoryId', async () => {
+    vi.mocked(readSyncConfig).mockReturnValue({ autoPush: true, pushRepos: ['my-repo'] });
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify([
-      { memoryId: 'test-1', reason: 'promotion', failedAt: '2026-06-24T00:00:00Z', attempts: 1, lastError: 'net' },
+      { memoryId: 'repo.my-repo.slug', reason: 'promotion', failedAt: '2026-06-24T00:00:00Z', attempts: 1, lastError: 'net' },
     ]));
     const gitSync = makeMockGitSync({
       push: vi.fn().mockResolvedValue({ ok: false, message: 'fail' }),
@@ -110,15 +158,13 @@ describe('AutoPushService', () => {
     const appendAudit = vi.fn();
     const svc = new AutoPushService(gitSync as any, '/mem/memory-pack.yaml', '/mem/.pending-push.json', appendAudit);
 
-    await svc.onPromoted({ id: 'test-1', visibility: 'team' });
+    await svc.onPromoted({ id: 'repo.my-repo.slug', visibility: 'team' });
 
-    // Dedup guard prevents writing when memoryId is already queued
     const writeCalls = vi.mocked(writeFileSync).mock.calls;
     const queueWrites = writeCalls.filter(([path]) => path === '/mem/.pending-push.json');
-    // Either no write happened (pure dedup), or the written queue has exactly one entry
     if (queueWrites.length > 0) {
       const queue = JSON.parse(queueWrites[0][1] as string);
-      expect(queue.filter((e: any) => e.memoryId === 'test-1')).toHaveLength(1);
+      expect(queue.filter((e: any) => e.memoryId === 'repo.my-repo.slug')).toHaveLength(1);
     } else {
       expect(queueWrites).toHaveLength(0);
     }

@@ -26,6 +26,7 @@ export class AutoPushService {
     if (!config.autoPush) return;
     if (memory.visibility === 'private') return;
     if (!this.gitSync.hasRemote()) return;
+    if (!this.isRepoAllowed(memory.id, config.pushRepos)) return;
 
     const result = await this.gitSync.push({ appendAudit: this.appendAudit });
     if (result.ok) {
@@ -82,6 +83,14 @@ export class AutoPushService {
 
   private clearQueue(): void {
     this.writeQueue([]);
+  }
+
+  private isRepoAllowed(memoryId: string, pushRepos: string[]): boolean {
+    if (pushRepos.length === 0) return false;
+    if (pushRepos.includes('*')) return true;
+    if (!memoryId.startsWith('repo.')) return false;
+    const repoName = memoryId.split('.')[1];
+    return pushRepos.includes(repoName);
   }
 
   private readQueue(): PendingPushEntry[] {

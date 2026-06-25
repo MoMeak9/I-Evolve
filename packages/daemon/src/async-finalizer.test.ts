@@ -120,7 +120,7 @@ describe('AsyncFinalizer', () => {
     expect(onPromoted).toHaveBeenCalledOnce();
     expect(onPromoted).toHaveBeenCalledWith({
       id: expect.stringContaining('use-ssr-for-dashboard'),
-      visibility: 'private',
+      visibility: 'team',
     });
   });
 

@@ -80,7 +80,7 @@ export class AsyncFinalizer {
 
       if (existingCount >= PROMOTION_THRESHOLD - 1) {
         this.deps.promoteCandidatesBySlug(slug, candidate.content, id);
-        await this.deps.onPromoted?.({ id, visibility: 'private' });
+        await this.deps.onPromoted?.({ id, visibility: 'team' });
       } else {
         this.deps.createMemory({
           id,
