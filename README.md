@@ -10,6 +10,22 @@ I-Evolve is a local-first, daemon-backed memory system for coding agents. It exp
 
 ## 快速安装 / Quick Install
 
+### 交互式引导（推荐）/ Guided Setup (Recommended)
+
+中文：如果你已安装 Claude Code 并 clone 了本仓库，可以直接使用 setup skill 完成全部配置：
+
+English: If you have Claude Code installed and have cloned this repo, use the setup skill for a fully guided experience:
+
+```bash
+/i-evolve:setup
+```
+
+该 skill 会自动引导你完成：环境检测（Node.js/nvm/pnpm）→ 依赖安装 → 构建 → 插件注册 → sync 配置（auto_push + 仓库白名单）→ 向量模型下载 → SQLite 索引初始化 → daemon 启动 → 项目绑定 → 健康检查。
+
+This skill guides you through: environment detection (Node.js/nvm/pnpm) → dependency install → build → plugin registration → sync config (auto_push + repo whitelist) → embedding model download → SQLite index init → daemon start → project binding → health check.
+
+### 手动安装 / Manual Install
+
 ```bash
 git clone <this-repo-url>
 cd I-Evolve
