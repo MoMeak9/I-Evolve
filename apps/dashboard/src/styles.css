@@ -9,7 +9,9 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #0a0e14; 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 .session-label { font-size: 12px; color: #6e7681; }
 .stats { display: flex; gap: 12px; margin-left: auto; }
-.stat { text-align: center; padding: 2px 10px; border-radius: 6px; background: #161c26; min-width: 52px; }
+.stat { text-align: center; padding: 2px 10px; border-radius: 6px; background: #161c26; min-width: 52px; cursor: pointer; border: 1px solid transparent; transition: border-color .15s, background .15s; }
+.stat:hover { background: #1c242f; }
+.stat.on { border-color: #58a6ff; background: #1a2432; }
 .stat .num { font-size: 16px; font-weight: 700; color: #e6edf3; }
 .stat .lbl { font-size: 10px; color: #6e7681; text-transform: uppercase; letter-spacing: .5px; }
 .stat.accept .num { color: #3fb950; } .stat.reject .num { color: #f85149; } .stat.mem .num { color: #d29922; }

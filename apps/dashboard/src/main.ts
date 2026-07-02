@@ -17,6 +17,7 @@ interface RejectedItem { reason: string; slug: string; sid: string; time: string
 
 const stats: MonitorStats = { observations: 0, candidates: 0, accepted: 0, rejected: 0, memories: 0, wasted: 0 };
 let filter = 'all';
+let catFilter = 'all'; // 事件类别筛选:all|obs|cand|acc|rej|mem
 let evTotal = 0;
 let pidc = 0;
 const rejectedItems: RejectedItem[] = [];
@@ -40,11 +41,11 @@ function init(host: HTMLElement): void {
       <span class="brand">◆ I-EVOLVE</span>
       <span class="session-label"><span class="status-dot off" id="statusDot"></span><span id="statusText">连接中…</span></span>
       <div class="stats">
-        <div class="stat"><div class="num" id="s-obs">0</div><div class="lbl">观测</div></div>
-        <div class="stat"><div class="num" id="s-cand">0</div><div class="lbl">候选</div></div>
-        <div class="stat accept"><div class="num" id="s-acc">0</div><div class="lbl">通过</div></div>
-        <div class="stat reject"><div class="num" id="s-rej">0</div><div class="lbl">拒绝</div></div>
-        <div class="stat mem"><div class="num" id="s-mem">0</div><div class="lbl">记忆</div></div>
+        <div class="stat" data-cat="obs" title="点击筛选观测事件"><div class="num" id="s-obs">0</div><div class="lbl">观测</div></div>
+        <div class="stat" data-cat="cand" title="点击筛选候选事件"><div class="num" id="s-cand">0</div><div class="lbl">候选</div></div>
+        <div class="stat accept" data-cat="acc" title="点击筛选通过事件"><div class="num" id="s-acc">0</div><div class="lbl">通过</div></div>
+        <div class="stat reject" data-cat="rej" title="点击筛选拒绝事件"><div class="num" id="s-rej">0</div><div class="lbl">拒绝</div></div>
+        <div class="stat mem" data-cat="mem" title="点击筛选记忆事件"><div class="num" id="s-mem">0</div><div class="lbl">记忆</div></div>
       </div>
     </div>
     <div class="chipbar" id="chipbar">
@@ -80,6 +81,11 @@ function wire(): void {
   $('chipbar')?.addEventListener('click', (e) => {
     const chip = (e.target as HTMLElement).closest?.('.chip') as HTMLElement | null;
     if (chip) filterSession(chip.dataset.sid ?? 'all', chip);
+  });
+
+  document.querySelector('.stats')?.addEventListener('click', (e) => {
+    const stat = (e.target as HTMLElement).closest?.('.stat') as HTMLElement | null;
+    if (stat?.dataset.cat) filterCategory(stat.dataset.cat);
   });
 
   const client = new MonitorClient('');
@@ -233,15 +239,16 @@ function enforceBeltLimit(): void {
   active.forEach((a) => a.el.classList.remove('overflow'));
   overflow.forEach((a) => a.el.classList.add('overflow'));
 }
-function addEvent(stageC: string, type: string, msg: string, detail?: Record<string, unknown> | null, ts?: string, sessionId?: string): void {
+function addEvent(stageC: string, type: string, msg: string, detail?: Record<string, unknown> | null, ts?: string, sessionId?: string, cat?: string): void {
   evTotal++;
   const list = $('evList');
   if (!list) return;
   const ev = document.createElement('div');
   ev.className = 'ev ' + stageC;
   if (sessionId) ev.dataset.sid = sessionId;
-  // 尊重当前筛选:有 sid 且非目标会话的新条目直接隐藏(无 sid 的系统级事件始终可见)
-  if (filter !== 'all' && sessionId && sessionId !== filter) ev.classList.add('hidden');
+  if (cat) ev.dataset.cat = cat;
+  // 尊重当前 session + 类别 双重筛选
+  if (!rowMatches(sessionId, cat)) ev.classList.add('hidden');
   ev.onclick = () => ev.classList.toggle('open');
   const dt = detail
     ? `<div class="detail">${Object.entries(detail).map(([k, v]) => `${esc(k)}: ${esc(fmt(v))}`).join('<br>')}</div>`
@@ -252,6 +259,27 @@ function addEvent(stageC: string, type: string, msg: string, detail?: Record<str
   while (list.children.length > 40) list.removeChild(list.lastChild!);
   const c = $('evCount');
   if (c) c.textContent = evTotal + ' events';
+}
+
+// 一个事件行是否通过当前双重筛选。
+// session:有 sid 且非目标则隐藏(无 sid 的系统事件始终显示);
+// 类别:有 cat 且非目标则隐藏(无 cat 的事件仅在「全部」类别下显示)。
+function rowMatches(sessionId?: string, cat?: string): boolean {
+  if (filter !== 'all' && sessionId && sessionId !== filter) return false;
+  if (catFilter !== 'all' && cat !== catFilter) return false;
+  return true;
+}
+
+// 把事件映射到右上角统计的类别(与计数逻辑保持一致);无对应类别返回 undefined。
+function eventCategory(e: MonitorEvent): string | undefined {
+  switch (e.type) {
+    case 'observation.received': return 'obs';
+    case 'extract.candidate': return 'cand';
+    case 'judge.result': return e.detail?.decision === 'reject' ? 'rej' : 'acc';
+    case 'memory.created':
+    case 'candidate.promoted': return 'mem';
+    default: return undefined;
+  }
 }
 
 interface ModalData {
@@ -294,16 +322,26 @@ function filterSession(sid: string, el: HTMLElement): void {
   marked.forEach((m) => {
     (m.el as HTMLElement).classList.toggle('dim', m.dimmed);
   });
-  // 事件流:非目标会话隐藏(无 sid 的系统级事件始终可见)
+  applyEventFilter();
+}
+
+// 点击右上角统计:按事件类别筛选事件流(与 session 筛选叠加)
+function filterCategory(cat: string): void {
+  catFilter = catFilter === cat ? 'all' : cat; // 再次点击同一项 = 取消
+  document.querySelectorAll('.stat').forEach((s) => {
+    s.classList.toggle('on', (s as HTMLElement).dataset.cat === catFilter);
+  });
+  applyEventFilter();
+}
+
+// 依据当前 session + 类别双重筛选,统一刷新事件流条目显隐
+function applyEventFilter(): void {
   const list = $('evList');
-  if (list) {
-    Array.from(list.querySelectorAll('.ev')).forEach((node) => {
-      const ev = node as HTMLElement;
-      const esid = ev.dataset.sid;
-      const hide = filter !== 'all' && !!esid && esid !== filter;
-      ev.classList.toggle('hidden', hide);
-    });
-  }
+  if (!list) return;
+  Array.from(list.querySelectorAll('.ev')).forEach((node) => {
+    const ev = node as HTMLElement;
+    ev.classList.toggle('hidden', !rowMatches(ev.dataset.sid, ev.dataset.cat));
+  });
 }
 
 function ensureSessionChip(sid?: string, source?: unknown): void {
@@ -370,7 +408,7 @@ function applySnapshot(snap: MonitorSnapshot): void {
 // 事件流条目(不含流水线动画,用于快照回放与所有事件的完整账本)
 function appendEventEntry(e: MonitorEvent): void {
   const stageC = e.type.includes('reject') || e.detail?.decision === 'reject' ? 'reject' : e.stage;
-  addEvent(stageC, e.type, e.summary, e.detail ?? null, e.ts, e.sessionId);
+  addEvent(stageC, e.type, e.summary, e.detail ?? null, e.ts, e.sessionId, eventCategory(e));
 }
 
 function modalFor(e: MonitorEvent, tagStage: string, title: string): ModalData {
