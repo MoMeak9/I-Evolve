@@ -21,3 +21,7 @@ export type {
 	  DashboardSummaryInput,
 	  DashboardRollbackInput,
 	} from './ipc-types.js';
+export { EventBus } from './event-bus.js';
+export { MonitorHttpServer } from './monitor-http-server.js';
+export { MONITOR_EVENT } from './monitor-types.js';
+export type { MonitorEvent, MonitorStats, MonitorSnapshot, MonitorStage, MonitorEventType } from './monitor-types.js';

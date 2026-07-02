@@ -314,3 +314,24 @@ describe('Daemon memory API', () => {
     expect(rebuild.data?.total).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('Daemon monitor 埋点', () => {
+  let daemon: Daemon;
+  afterEach(async () => { try { await daemon.stop(); } catch {} });
+
+  it('observe 请求触发 observation.received 事件', async () => {
+    daemon = new Daemon();
+    const events: any[] = [];
+    daemon.eventBus.subscribe((e) => events.push(e));
+    await daemon.start();
+    await sendRequest({
+      type: 'observe',
+      payload: {
+        id: 'o1', timestamp: '2026-06-12T10:00:00+08:00', sessionId: 's1',
+        source: 'cli', phase: 'manual', summary: 'hi there',
+        status: 'success', sensitivity: 'internal',
+      } as any,
+    });
+    expect(events.find((e) => e.type === 'observation.received')).toBeTruthy();
+  });
+});

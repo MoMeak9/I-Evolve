@@ -1,9 +1,10 @@
 import { mkdirSync, existsSync, readFileSync, appendFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { paths } from './paths.js';
 import { UnifiedExtractor, getProvider, SessionStore, PolicyJudge } from '@i-evolve/ai-evolution';
 import { MarkdownMemoryRepository } from '@i-evolve/storage';
-import { AsyncFinalizer } from './async-finalizer.js';
+import { AsyncFinalizer, type AsyncFinalizerDeps } from './async-finalizer.js';
 import type { Observation } from '@i-evolve/core';
 import { ProcessLock } from './lock.js';
 import { IpcServer, type RequestHandler } from './ipc-server.js';
@@ -15,6 +16,10 @@ import { DaemonMemoryService } from './memory-service.js';
 import { IEvolveError } from '@i-evolve/shared';
 import { AutoPushService } from './auto-push-service.js';
 import { GitMemorySync } from '@i-evolve/git-sync';
+import { EventBus } from './event-bus.js';
+import { MonitorHttpServer } from './monitor-http-server.js';
+import { instrumentFinalizerDeps } from './pipeline-events.js';
+import { MONITOR_EVENT } from './monitor-types.js';
 
 export class Daemon {
   private lock = new ProcessLock();
@@ -26,6 +31,8 @@ export class Daemon {
   private startedAt: string | null = null;
   private signalHandler = () => void this.stop();
   private autoPush: AutoPushService;
+  readonly eventBus = new EventBus();
+  private monitorHttp: MonitorHttpServer;
 
   constructor() {
     this.ipc = new IpcServer(this.handleRequest.bind(this));
@@ -36,6 +43,20 @@ export class Daemon {
       join(paths.shared.memory, '.pending-push.json'),
       (action) => this.audit.append(action),
     );
+    const here = dirname(fileURLToPath(import.meta.url));
+    const staticDir = join(here, '..', '..', '..', 'apps', 'dashboard');
+    this.monitorHttp = new MonitorHttpServer(this.eventBus, {
+      staticDir,
+      logWarning: (msg) => this.logDaemonWarning(msg),
+    });
+  }
+
+  private logDaemonWarning(msg: string): void {
+    try {
+      const dir = paths.logs.dir;
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      appendFileSync(join(dir, 'monitor.log'), `[${new Date().toISOString()}] WARN: ${msg}\n`, 'utf-8');
+    } catch { /* 日志失败不影响 daemon */ }
   }
 
   async start(): Promise<void> {
@@ -52,6 +73,7 @@ export class Daemon {
     }
 
     await this.ipc.start();
+    await this.monitorHttp.start();
     this.startedAt = new Date().toISOString();
     this.autoPush.flush().catch(() => {});
 
@@ -61,6 +83,7 @@ export class Daemon {
 
   async stop(): Promise<void> {
     await this.ipc.stop();
+    await this.monitorHttp.stop();
     this.lock.release();
     this.startedAt = null;
     process.off('SIGTERM', this.signalHandler);
@@ -89,6 +112,12 @@ export class Daemon {
       case 'observe':
         return this.txManager.run('observe', { name: 'observe' }, async () => {
           this.observations.append(req.payload);
+          this.eventBus.emit({
+            stage: 'observe', type: MONITOR_EVENT.observationReceived,
+            sessionId: req.payload.sessionId,
+            summary: `收到观测:${String(req.payload.summary ?? '').slice(0, 40)}`,
+            detail: { id: req.payload.id, source: req.payload.source, phase: req.payload.phase },
+          });
           return { ok: true, data: { id: req.payload.id } } as DaemonResponse;
         });
 
@@ -99,10 +128,20 @@ export class Daemon {
         });
 
       case 'session.start':
+        this.eventBus.emit({
+          stage: 'observe', type: MONITOR_EVENT.sessionStart,
+          sessionId: req.payload.sessionId,
+          summary: `会话开始:${req.payload.sessionId}`,
+        });
         return { ok: true, data: { sessionId: req.payload.sessionId } };
 
       case 'session.finalize': {
         const { sessionId, autoEvolve } = req.payload;
+        this.eventBus.emit({
+          stage: 'observe', type: MONITOR_EVENT.sessionFinalize,
+          sessionId,
+          summary: `会话收尾,进入异步流水线:${sessionId}`,
+        });
         setImmediate(() => this.runAsyncFinalize(sessionId, autoEvolve ?? false));
         return { ok: true, data: { queued: true, sessionId } };
       }
@@ -119,7 +158,15 @@ export class Daemon {
 
       case 'memory.forget':
         return this.txManager.run('memory.forget', { name: 'memory.forget' }, async () =>
-          this.handleMemoryRead(() => this.memory.forget(req.payload)));
+          this.handleMemoryRead(() => {
+            const result = this.memory.forget(req.payload);
+            this.eventBus.emit({
+              stage: 'store', type: MONITOR_EVENT.memoryForgotten,
+              summary: `遗忘记忆:${req.payload.memoryId}`,
+              detail: { memoryId: req.payload.memoryId, mode: req.payload.mode ?? 'soft' },
+            });
+            return result;
+          }));
 
       case 'memory.audit':
         return this.handleMemoryRead(() => this.memory.auditMemory(req.payload));
@@ -139,7 +186,15 @@ export class Daemon {
 
       case 'dashboard.rollback':
         return this.txManager.run('dashboard.rollback', { name: 'dashboard.rollback' }, async () =>
-          this.handleMemoryRead(() => this.memory.rollback(req.payload)));
+          this.handleMemoryRead(() => {
+            const result = this.memory.rollback(req.payload);
+            this.eventBus.emit({
+              stage: 'store', type: MONITOR_EVENT.memoryRolledback,
+              summary: `回滚到提交:${req.payload.toCommit}`,
+              detail: { toCommit: req.payload.toCommit, mode: req.payload.mode ?? 'checkout' },
+            });
+            return result;
+          }));
 
       case 'index.rebuild':
         return this.txManager.run('index.rebuild', { name: 'index.rebuild' }, async () =>
@@ -170,7 +225,7 @@ export class Daemon {
       dbPath: join(paths.base, 'shared', 'index.db'),
     });
 
-    const finalizer = new AsyncFinalizer({
+    const baseDeps = {
       extract: (obs, sid, rid) => extractor.extract(obs, sid, rid),
       saveSession: (summary) => store.save(summary),
       countCandidatesBySlug: (slug) => repo.countCandidatesBySlug(slug),
@@ -187,13 +242,31 @@ export class Daemon {
         const logDir = paths.logs.dir;
         if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
         appendFileSync(join(logDir, 'async-finalizer.log'), `[${new Date().toISOString()}] WARN: ${msg}\n`, 'utf-8');
+        this.eventBus.emit({ stage: 'system', type: MONITOR_EVENT.warning, sessionId, summary: msg, level: 'warn' });
       },
       onPromoted: (memory) => this.autoPush.onPromoted(memory),
-    });
+    } satisfies AsyncFinalizerDeps;
+
+    const finalizer = new AsyncFinalizer(
+      instrumentFinalizerDeps(baseDeps, this.eventBus, sessionId),
+    );
 
     try {
       await finalizer.finalize(observations, sessionId);
-      await this.autoPush.flush();
+      const flushResult = await this.autoPush.flush();
+      if (flushResult.pushed > 0) {
+        this.eventBus.emit({
+          stage: 'sync', type: MONITOR_EVENT.autopushPushed, sessionId,
+          summary: `已推送 ${flushResult.pushed} 条记忆`,
+          detail: { pushed: flushResult.pushed, failed: flushResult.failed },
+        });
+      }
+    } catch (err) {
+      this.eventBus.emit({
+        stage: 'system', type: MONITOR_EVENT.pipelineError, sessionId,
+        summary: `流水线错误:${err instanceof Error ? err.message : String(err)}`,
+        level: 'error',
+      });
     } finally {
       repo.close();
     }
