@@ -2,6 +2,8 @@ import type { EventBus } from './event-bus.js';
 import type { AsyncFinalizerDeps } from './async-finalizer.js';
 import { MONITOR_EVENT } from './monitor-types.js';
 
+const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
 /** 把 finalizer 回调包一层 emit;原回调行为不变。 */
 export function instrumentFinalizerDeps(
   base: AsyncFinalizerDeps,
@@ -22,7 +24,7 @@ export function instrumentFinalizerDeps(
         bus.emit({
           stage: 'think', type: MONITOR_EVENT.extractCandidate, sessionId,
           summary: `抽出候选:"${c.title}"`,
-          detail: { title: c.title, type: c.type, confidence: c.confidence, proposedScope: c.proposedScope },
+          detail: { title: c.title, slug: slugify(c.title), type: c.type, confidence: c.confidence, proposedScope: c.proposedScope },
         });
       }
       return result;
@@ -32,7 +34,7 @@ export function instrumentFinalizerDeps(
       bus.emit({
         stage: 'judge', type: MONITOR_EVENT.judgeStart, sessionId,
         summary: `判定候选:"${candidate.title}"`,
-        detail: { title: candidate.title },
+        detail: { title: candidate.title, slug: slugify(candidate.title) },
       });
       const decision = base.judgeCandidate(candidate);
       bus.emit({
@@ -42,6 +44,8 @@ export function instrumentFinalizerDeps(
           : `✓ ${decision.decision}:${decision.reason}`,
         level: decision.decision === 'reject' ? 'warn' : 'info',
         detail: {
+          title: candidate.title,
+          slug: slugify(candidate.title),
           decision: decision.decision,
           reason: decision.reason,
           confidence: decision.confidence,

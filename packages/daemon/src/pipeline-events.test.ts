@@ -31,6 +31,9 @@ describe('instrumentFinalizerDeps', () => {
     expect(start.detail.observationCount).toBe(2);
     expect(start.sessionId).toBe('sess-1');
     expect(events.filter((e) => e.type === 'extract.candidate')).toHaveLength(1);
+    const cand = events.find((e) => e.type === 'extract.candidate');
+    expect(cand.detail.slug).toBeTruthy();
+    expect(cand.detail.slug).toBe('prefer-pnpm');
   });
 
   it('judgeCandidate 包装后 emit judge.start 与 judge.result(带 decision + reason)', () => {
