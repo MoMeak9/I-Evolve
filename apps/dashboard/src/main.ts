@@ -26,9 +26,6 @@ const SEG = 2600;
 const MAX_BELT = 4;
 const anchors = { observe: 0, think: 0.34, judge: 0.66, mem: 1.0 };
 
-const root = document.getElementById('root');
-if (root) init(root);
-
 function init(host: HTMLElement): void {
   host.innerHTML = `
     <div class="topbar">
@@ -431,4 +428,9 @@ function dropToWaste(sid: string, reason: string, data: ModalData): void {
   })(start);
   setTimeout(() => el.remove(), 1100);
 }
+
+// Bootstrap runs last so all const helpers ($, now, esc, fmt, PATH, ...) are
+// initialized before init() → wire() → buildPath() call them (avoid TDZ crash).
+const root = document.getElementById('root');
+if (root) init(root);
 
