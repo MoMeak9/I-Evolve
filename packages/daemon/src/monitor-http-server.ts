@@ -16,6 +16,9 @@ export interface MonitorHttpOptions {
   host?: string;
   staticDir?: string | null; // 前端构建产物目录;null=不托管静态页(测试用)
   logWarning?: (msg: string) => void;
+  // 记忆库只读访问(观测台「记忆」计数与浏览);未提供则相关端点返回空。
+  memoryList?: () => { total: number; items: unknown[] };
+  memoryDetail?: (id: string) => unknown;
 }
 
 export class MonitorHttpServer {
@@ -24,12 +27,16 @@ export class MonitorHttpServer {
   private host: string;
   private staticDir: string | null;
   private logWarning: (msg: string) => void;
+  private memoryList?: () => { total: number; items: unknown[] };
+  private memoryDetail?: (id: string) => unknown;
 
   constructor(private bus: EventBus, opts: MonitorHttpOptions = {}) {
     this.port = opts.port ?? 17361;
     this.host = opts.host ?? '127.0.0.1';
     this.staticDir = opts.staticDir ?? null;
     this.logWarning = opts.logWarning ?? (() => {});
+    this.memoryList = opts.memoryList;
+    this.memoryDetail = opts.memoryDetail;
   }
 
   /** 成功返回 true;端口占用等失败返回 false(不抛错,daemon 降级继续) */
@@ -57,15 +64,38 @@ export class MonitorHttpServer {
   }
 
   private route(req: IncomingMessage, res: ServerResponse): void {
-    const url = (req.url ?? '/').split('?')[0];
-    if (url === '/snapshot') return this.handleSnapshot(res);
-    if (url === '/events') return this.handleEvents(req, res);
-    void this.handleStatic(url, res);
+    const [path, qs] = (req.url ?? '/').split('?');
+    if (path === '/snapshot') return this.handleSnapshot(res);
+    if (path === '/events') return this.handleEvents(req, res);
+    if (path === '/memories') return this.handleMemoryList(res);
+    if (path === '/memory') return this.handleMemoryDetail(qs ?? '', res);
+    void this.handleStatic(path, res);
   }
 
   private handleSnapshot(res: ServerResponse): void {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(this.bus.snapshot()));
+  }
+
+  private handleMemoryList(res: ServerResponse): void {
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+    try {
+      res.end(JSON.stringify(this.memoryList?.() ?? { total: 0, items: [] }));
+    } catch (err) {
+      this.logWarning(`记忆库列表读取失败: ${(err as Error).message}`);
+      res.end(JSON.stringify({ total: 0, items: [] }));
+    }
+  }
+
+  private handleMemoryDetail(qs: string, res: ServerResponse): void {
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+    const id = new URLSearchParams(qs).get('id') ?? '';
+    try {
+      res.end(JSON.stringify(id ? (this.memoryDetail?.(id) ?? null) : null));
+    } catch (err) {
+      this.logWarning(`记忆详情读取失败: ${(err as Error).message}`);
+      res.end('null');
+    }
   }
 
   private handleEvents(req: IncomingMessage, res: ServerResponse): void {

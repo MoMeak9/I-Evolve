@@ -183,6 +183,27 @@ export class DaemonMemoryService {
     return sync.push({ appendAudit: hooks.appendAudit });
   }
 
+  /** 记忆库真实概览(轻量,供观测台顶栏「记忆」计数与浏览列表)。不读 markdown 文件。 */
+  memoryList(): { total: number; items: Array<Omit<MemoryItem, 'content'>> } {
+    const repo = this.openRepo();
+    try {
+      const items = repo.listSummaries({ status: 'active' });
+      return { total: items.length, items };
+    } finally {
+      repo.close();
+    }
+  }
+
+  /** 单条记忆完整内容(含正文),供观测台点击查看。 */
+  memoryDetail(id: string): MemoryItem | null {
+    const repo = this.openRepo();
+    try {
+      return repo.get(id);
+    } finally {
+      repo.close();
+    }
+  }
+
   dashboardSummary(): unknown {
     const repo = this.openRepo();
     try {

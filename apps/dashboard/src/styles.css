@@ -102,4 +102,14 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #0a0e14; 
 .modal .rejrow .rr-sid { font-size: 9px; color: #6e7681; }
 .modal .rejrow .rr-det { color: #8b949e; font-family: ui-monospace, monospace; font-size: 11px; margin-top: 2px; }
 
+/* 记忆库浏览 */
+.modal .memrow { padding: 8px 10px; margin: 0 -8px; border-bottom: 1px solid #1b222d; cursor: pointer; border-radius: 6px; }
+.modal .memrow:hover { background: #161c26; }
+.modal .memrow .mr-top { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.modal .memrow .mr-title { font-size: 12px; color: #c9d1d9; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal .memrow .mr-scope { font-size: 9px; color: #7ee787; text-transform: uppercase; flex-shrink: 0; }
+.modal .memrow .mr-sub { font-size: 10px; color: #6e7681; font-family: ui-monospace, monospace; margin-top: 2px; }
+.modal .mhead .back { cursor: pointer; color: #58a6ff; font-size: 12px; }
+.modal .memcontent { font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin-bottom: 14px; color: #c9d1d9; }
+
 .demo-note { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 11px; color: #484f58; background: #111722; border: 1px solid #1e2632; padding: 5px 14px; border-radius: 14px; z-index: 20; }

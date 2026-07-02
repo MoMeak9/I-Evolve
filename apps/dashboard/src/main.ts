@@ -1,5 +1,5 @@
 import { MonitorClient } from './sse-client.js';
-import type { MonitorEvent, MonitorSnapshot, MonitorStats } from './types.js';
+import type { MonitorEvent, MonitorSnapshot, MonitorStats, MemorySummary, MemoryDetail, MemoryListResponse } from './types.js';
 import { applyFilter, sessionColor, splitBeltParcels } from './pipeline-view.js';
 
 const STAGE_TC: Record<string, [string, string]> = {
@@ -16,6 +16,8 @@ interface ActiveParcel { id: number; sessionId: string; el: HTMLDivElement; }
 interface RejectedItem { reason: string; slug: string; sid: string; time: string; det: Record<string, unknown>; }
 
 const stats: MonitorStats = { observations: 0, candidates: 0, accepted: 0, rejected: 0, memories: 0, wasted: 0 };
+let memStore = 0; // 记忆库真实条数(来自 daemon /memories,与会话内 stats.memories 区分)
+let memCache: MemorySummary[] = []; // 最近一次拉取的记忆库列表,供浏览弹窗渲染
 let filter = 'all';
 let catFilter = 'all'; // 事件类别筛选:all|obs|cand|acc|rej|mem
 let evTotal = 0;
@@ -45,7 +47,7 @@ function init(host: HTMLElement): void {
         <div class="stat" data-cat="cand" title="点击筛选候选事件"><div class="num" id="s-cand">0</div><div class="lbl">候选</div></div>
         <div class="stat accept" data-cat="acc" title="点击筛选通过事件"><div class="num" id="s-acc">0</div><div class="lbl">通过</div></div>
         <div class="stat reject" data-cat="rej" title="点击筛选拒绝事件"><div class="num" id="s-rej">0</div><div class="lbl">拒绝</div></div>
-        <div class="stat mem" data-cat="mem" title="点击筛选记忆事件"><div class="num" id="s-mem">0</div><div class="lbl">记忆</div></div>
+        <div class="stat mem" id="stat-mem" title="点击查看记忆库"><div class="num" id="s-mem">0</div><div class="lbl">记忆</div></div>
       </div>
     </div>
     <div class="chipbar" id="chipbar">
@@ -88,6 +90,8 @@ function wire(): void {
     if (stat?.dataset.cat) filterCategory(stat.dataset.cat);
   });
 
+  $('stat-mem')?.addEventListener('click', openMemoryStore);
+
   const client = new MonitorClient('');
   client.start({
     onStatus: setStatus,
@@ -95,6 +99,7 @@ function wire(): void {
     onEvent: handleEvent,
   });
   refreshStats();
+  void loadMemoryStore();
 }
 
 function setStatus(connected: boolean): void {
@@ -143,6 +148,7 @@ function placeStations(stage: HTMLElement, g: { mx: number; top: number; midY: n
   mk(W - g.mx, g.midY, '⚙️', '思考站', 'extract', 'st-think');
   mk(g.mx, g.midY, '🚦', '准入闸门', 'judge', 'st-judge');
   mk(W - g.mx, g.botY, '🏛️', '记忆库', 'memory', 'st-mem', stats.memories);
+  $('st-mem')?.addEventListener('click', () => void openMemoryStore());
   const w = document.createElement('div');
   w.className = 'waste';
   w.id = 'waste';
@@ -178,9 +184,23 @@ function refreshStats(): void {
   set('s-cand', stats.candidates);
   set('s-acc', stats.accepted);
   set('s-rej', stats.rejected);
-  set('s-mem', stats.memories);
+  // 「记忆」显示记忆库真实条数;守护进程刚启动、会话内尚无新增时也非 0
+  set('s-mem', memStore);
   const wc = $('wasteCount');
   if (wc) wc.textContent = String(stats.wasted);
+}
+
+// 拉取记忆库真实条数(daemon /memories),填入顶栏「记忆」
+async function loadMemoryStore(): Promise<void> {
+  try {
+    const r = await fetch('/memories');
+    const data = (await r.json()) as MemoryListResponse;
+    memStore = data.total ?? 0;
+    memCache = data.items ?? [];
+    refreshStats();
+  } catch {
+    /* daemon 不可用时保持 0,不阻塞其它功能 */
+  }
 }
 
 function movePar(el: HTMLElement, fromFrac: number, toFrac: number, dur: number): void {
@@ -311,6 +331,47 @@ function openWaste(): void {
 
 function closeModal(): void {
   $('modalBg')?.classList.remove('show');
+}
+
+// 记忆库浏览:列出真实记忆(点击「记忆」或记忆库站触发),每行可点开看正文
+async function openMemoryStore(): Promise<void> {
+  const c = $('modalCard');
+  if (!c) return;
+  if (memCache.length === 0) await loadMemoryStore();
+  const rows = memCache.length
+    ? memCache.map((m) => `<div class="memrow" data-id="${esc(m.id)}"><div class="mr-top"><span class="mr-title">${esc(m.title)}</span><span class="mr-scope">${esc(m.scope)}</span></div><div class="mr-sub">${esc(m.domain ?? m.repoId ?? m.id)} · ${esc(m.updatedAt?.slice(0, 10) ?? '')}</div></div>`).join('')
+    : '<p style="color:#6e7681;font-size:12px">记忆库为空</p>';
+  c.innerHTML = `<div class="mhead"><span class="tag" style="background:#1f5f2f;color:#7ee787">memory</span><b style="font-size:13px">🏛️ 记忆库 · 共 ${memStore} 条</b><span class="x" id="modalX">✕</span></div><div class="mbody" id="memListBody">${rows}</div>`;
+  $('modalX')?.addEventListener('click', closeModal);
+  $('memListBody')?.addEventListener('click', (e) => {
+    const row = (e.target as HTMLElement).closest?.('.memrow') as HTMLElement | null;
+    if (row?.dataset.id) void openMemoryDetail(row.dataset.id);
+  });
+  $('modalBg')?.classList.add('show');
+}
+
+// 单条记忆详情:拉取完整正文并渲染,返回可回到列表
+async function openMemoryDetail(id: string): Promise<void> {
+  const c = $('modalCard');
+  if (!c) return;
+  let m: MemoryDetail | null = null;
+  try {
+    m = (await fetch(`/memory?id=${encodeURIComponent(id)}`).then((r) => r.json())) as MemoryDetail | null;
+  } catch { /* 读取失败按空处理 */ }
+  if (!m) {
+    c.innerHTML = `<div class="mhead"><span class="tag" style="background:#1f5f2f;color:#7ee787">memory</span><b style="font-size:13px">未找到该记忆</b><span class="x" id="modalX">✕</span></div><div class="mbody"><p style="color:#6e7681;font-size:12px">${esc(id)}</p></div>`;
+    $('modalX')?.addEventListener('click', closeModal);
+    return;
+  }
+  const kv: Record<string, unknown> = {
+    id: m.id, scope: m.scope, type: m.type, status: m.status,
+    domain: m.domain ?? '', repoId: m.repoId ?? '',
+    confidence: m.confidence, revision: m.revision,
+    tags: (m.tags ?? []).join(', '), updatedAt: m.updatedAt,
+  };
+  c.innerHTML = `<div class="mhead"><span class="back" id="memBack">‹ 返回</span><span class="tag" style="background:#1f5f2f;color:#7ee787">memory</span><b style="font-size:13px">${esc(m.title)}</b><span class="x" id="modalX">✕</span></div><div class="mbody"><div class="memcontent">${esc(m.content)}</div><div class="kv">${Object.entries(kv).map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(fmt(v))}</span>`).join('')}</div></div>`;
+  $('modalX')?.addEventListener('click', closeModal);
+  $('memBack')?.addEventListener('click', () => void openMemoryStore());
 }
 
 function filterSession(sid: string, el: HTMLElement): void {
@@ -471,6 +532,8 @@ function handleEvent(e: MonitorEvent): void {
     case 'memory.created':
     case 'candidate.promoted': {
       stats.memories++;
+      memStore++; // 记忆库实时增长
+      memCache = []; // 缓存失效,下次打开重新拉取
       refreshStats();
       flashStation('st-mem');
       bumpBadge();

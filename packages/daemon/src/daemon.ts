@@ -48,6 +48,8 @@ export class Daemon {
     this.monitorHttp = new MonitorHttpServer(this.eventBus, {
       staticDir,
       logWarning: (msg) => this.logDaemonWarning(msg),
+      memoryList: () => this.memory.memoryList(),
+      memoryDetail: (id) => this.memory.memoryDetail(id),
     });
   }
 

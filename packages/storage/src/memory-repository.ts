@@ -46,6 +46,17 @@ export class MarkdownMemoryRepository {
     }).filter(Boolean) as MemoryItem[];
   }
 
+  /**
+   * Lightweight listing straight from the SQLite index — no markdown file reads,
+   * no `content`. For UIs that need to render hundreds of memory rows cheaply.
+   */
+  listSummaries(filter?: { status?: string; scope?: string; repoId?: string }): Array<Omit<MemoryItem, 'content'>> {
+    return this.index.listMemories(filter).map((row) => {
+      const { file_path: _fp, ...rest } = row;
+      return mapKeysSnakeToCamel(rest) as unknown as Omit<MemoryItem, 'content'>;
+    });
+  }
+
   search(query: string): Array<{ memory: MemoryItem; rank: number }> {
     const results = this.index.search(query, { status: 'active' });
     const now = Date.now();

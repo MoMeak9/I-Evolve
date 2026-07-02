@@ -46,4 +46,40 @@ describe('MonitorHttpServer', () => {
     expect(ok).toBe(false);
     await first.stop();
   });
+
+  it('GET /memories 返回记忆库真实总数与轻量列表', async () => {
+    const bus = new EventBus();
+    server = new MonitorHttpServer(bus, {
+      port: PORT + 1,
+      staticDir: null,
+      memoryList: () => ({ total: 2, items: [{ id: 'a' }, { id: 'b' }] }),
+    });
+    await server.start();
+    const res = await fetch(`http://127.0.0.1:${PORT + 1}/memories`);
+    const body = (await res.json()) as { total: number; items: unknown[] };
+    expect(body.total).toBe(2);
+    expect(body.items).toHaveLength(2);
+  });
+
+  it('GET /memory?id= 返回单条记忆详情', async () => {
+    const bus = new EventBus();
+    server = new MonitorHttpServer(bus, {
+      port: PORT + 2,
+      staticDir: null,
+      memoryDetail: (id) => (id === 'x' ? { id: 'x', content: 'hello' } : null),
+    });
+    await server.start();
+    const hit = await (await fetch(`http://127.0.0.1:${PORT + 2}/memory?id=x`)).json();
+    expect(hit).toEqual({ id: 'x', content: 'hello' });
+    const miss = await (await fetch(`http://127.0.0.1:${PORT + 2}/memory?id=nope`)).json();
+    expect(miss).toBeNull();
+  });
+
+  it('未提供 memoryList 时 /memories 返回空而非报错', async () => {
+    const bus = new EventBus();
+    server = new MonitorHttpServer(bus, { port: PORT + 3, staticDir: null });
+    await server.start();
+    const body = (await (await fetch(`http://127.0.0.1:${PORT + 3}/memories`)).json()) as { total: number };
+    expect(body.total).toBe(0);
+  });
 });
