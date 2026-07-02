@@ -233,12 +233,15 @@ function enforceBeltLimit(): void {
   active.forEach((a) => a.el.classList.remove('overflow'));
   overflow.forEach((a) => a.el.classList.add('overflow'));
 }
-function addEvent(stageC: string, type: string, msg: string, detail?: Record<string, unknown> | null, ts?: string): void {
+function addEvent(stageC: string, type: string, msg: string, detail?: Record<string, unknown> | null, ts?: string, sessionId?: string): void {
   evTotal++;
   const list = $('evList');
   if (!list) return;
   const ev = document.createElement('div');
   ev.className = 'ev ' + stageC;
+  if (sessionId) ev.dataset.sid = sessionId;
+  // 尊重当前筛选:有 sid 且非目标会话的新条目直接隐藏(无 sid 的系统级事件始终可见)
+  if (filter !== 'all' && sessionId && sessionId !== filter) ev.classList.add('hidden');
   ev.onclick = () => ev.classList.toggle('open');
   const dt = detail
     ? `<div class="detail">${Object.entries(detail).map(([k, v]) => `${esc(k)}: ${esc(fmt(v))}`).join('<br>')}</div>`
@@ -286,10 +289,21 @@ function filterSession(sid: string, el: HTMLElement): void {
   filter = sid;
   document.querySelectorAll('.chip').forEach((c) => c.classList.remove('on'));
   el.classList.add('on');
+  // 传送带包裹:非目标会话淡出
   const marked = applyFilter(active.map((a) => ({ id: a.id, sessionId: a.sessionId, el: a.el })), filter);
   marked.forEach((m) => {
     (m.el as HTMLElement).classList.toggle('dim', m.dimmed);
   });
+  // 事件流:非目标会话隐藏(无 sid 的系统级事件始终可见)
+  const list = $('evList');
+  if (list) {
+    Array.from(list.querySelectorAll('.ev')).forEach((node) => {
+      const ev = node as HTMLElement;
+      const esid = ev.dataset.sid;
+      const hide = filter !== 'all' && !!esid && esid !== filter;
+      ev.classList.toggle('hidden', hide);
+    });
+  }
 }
 
 function ensureSessionChip(sid?: string, source?: unknown): void {
@@ -356,7 +370,7 @@ function applySnapshot(snap: MonitorSnapshot): void {
 // 事件流条目(不含流水线动画,用于快照回放与所有事件的完整账本)
 function appendEventEntry(e: MonitorEvent): void {
   const stageC = e.type.includes('reject') || e.detail?.decision === 'reject' ? 'reject' : e.stage;
-  addEvent(stageC, e.type, e.summary, e.detail ?? null, e.ts);
+  addEvent(stageC, e.type, e.summary, e.detail ?? null, e.ts, e.sessionId);
 }
 
 function modalFor(e: MonitorEvent, tagStage: string, title: string): ModalData {

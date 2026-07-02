@@ -82,6 +82,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #0a0e14; 
 .ev.reject { border-left-color: #f85149; } .ev.reject .tag { background: #5f1f22; color: #ff7b72; }
 .ev .detail { font-size: 11px; color: #8b949e; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #21262d; display: none; font-family: ui-monospace, monospace; line-height: 1.5; word-break: break-all; }
 .ev.open .detail { display: block; }
+.ev.hidden { display: none; }
 
 .modal-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, .65); display: none; align-items: center; justify-content: center; z-index: 50; }
 .modal-bg.show { display: flex; }
