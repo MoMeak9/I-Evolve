@@ -189,13 +189,6 @@ if (command === 'daemon') {
 } else if (command === 'mcp') {
   const { handleMcpCommand } = await import('./commands/mcp.js');
   await handleMcpCommand(subcommand, values);
-} else if (command === 'dashboard') {
-  if (subcommand !== 'bridge') {
-    console.error('Usage: i-evolve dashboard bridge [--port 17361]');
-    process.exit(1);
-  }
-  const { startDashboardBridge } = await import('@i-evolve/dashboard/bridge');
-  startDashboardBridge(values.port ? Number(values.port) : undefined);
 } else if (command === 'setup') {
   const { handleSetupCommand } = await import('./commands/setup.js');
   await handleSetupCommand(subcommand, values);

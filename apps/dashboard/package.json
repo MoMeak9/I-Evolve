@@ -3,11 +3,10 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/main.ts",
-    "./bridge": "./src/bridge.ts"
+    ".": "./src/main.ts"
   },
   "scripts": {
-    "build": "tsup src/main.ts src/bridge.ts --format esm",
+    "build": "tsup src/main.ts --format esm",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
