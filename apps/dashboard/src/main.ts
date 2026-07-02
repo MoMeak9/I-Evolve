@@ -21,6 +21,14 @@ let evTotal = 0;
 let pidc = 0;
 const rejectedItems: RejectedItem[] = [];
 const sessions = new Map<string, number>();
+const sourceCounts = new Map<string, number>(); // 每个来源已分配的序号,用于「Claude Code 1/2」
+const SOURCE_LABELS: Record<string, string> = {
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  cursor: 'Cursor',
+  cli: 'CLI',
+  mcp: 'MCP',
+};
 const active: ActiveParcel[] = [];
 const SEG = 2600;
 const MAX_BELT = 4;
@@ -284,20 +292,45 @@ function filterSession(sid: string, el: HTMLElement): void {
   });
 }
 
-function ensureSessionChip(sid?: string): void {
-  if (!sid || sessions.has(sid)) return;
-  const idx = sessionColor(sid);
-  const ordinal = sessions.size + 1; // 按出现顺序编号,避免 id 化命名
-  sessions.set(sid, idx);
+function ensureSessionChip(sid?: string, source?: unknown): void {
+  if (!sid) return;
   const bar = $('chipbar');
   if (!bar) return;
-  const chip = document.createElement('div');
-  chip.className = `chip c${idx}`;
-  chip.dataset.sid = sid;
-  chip.title = sid; // 完整 id 保留在 tooltip,便于和日志对应
-  chip.innerHTML = `<span class="d"></span>会话 ${ordinal}`;
-  bar.appendChild(chip);
-  setStatus(true);
+  const src = typeof source === 'string' && SOURCE_LABELS[source] ? source : undefined;
+
+  // 新会话:建 chip,颜色与出现顺序固定
+  if (!sessions.has(sid)) {
+    const idx = sessionColor(sid);
+    sessions.set(sid, idx);
+    const chip = document.createElement('div');
+    chip.className = `chip c${idx}`;
+    chip.dataset.sid = sid;
+    chip.title = sid; // 完整 id 保留在 tooltip,便于和日志对应
+    bar.appendChild(chip);
+    setStatus(true);
+  }
+
+  // 命名:有来源则用「Claude Code N」(同源递增),否则临时「会话 N」;
+  // 已按来源命名过的不再降级。
+  const chip = findChip(sid);
+  if (!chip) return;
+  if (chip.dataset.named === 'source') return;
+  let label: string;
+  if (src) {
+    const n = (sourceCounts.get(src) ?? 0) + 1;
+    sourceCounts.set(src, n);
+    label = `${SOURCE_LABELS[src]} ${n}`;
+    chip.dataset.named = 'source';
+  } else {
+    label = `会话 ${sessions.size}`;
+  }
+  chip.innerHTML = `<span class="d"></span>${esc(label)}`;
+}
+
+function findChip(sid: string): HTMLElement | null {
+  const bar = $('chipbar');
+  if (!bar) return null;
+  return Array.from(bar.querySelectorAll('.chip')).find((c) => (c as HTMLElement).dataset.sid === sid) as HTMLElement | null;
 }
 
 function esc(v: unknown): string {
@@ -315,7 +348,7 @@ function applySnapshot(snap: MonitorSnapshot): void {
   // 预填充事件流(快照按 id 升序;最新在列表顶部,与实时插入一致)
   const evs = [...(snap.events ?? [])].sort((a, b2) => a.id - b2.id);
   for (const e of evs) {
-    ensureSessionChip(e.sessionId);
+    ensureSessionChip(e.sessionId, e.detail?.source);
     appendEventEntry(e);
   }
 }
@@ -334,7 +367,7 @@ function modalFor(e: MonitorEvent, tagStage: string, title: string): ModalData {
 // ---- 核心:单一入口,按 stage/type 映射到流水线动作 ----
 function handleEvent(e: MonitorEvent): void {
   setStatus(true);
-  ensureSessionChip(e.sessionId);
+  ensureSessionChip(e.sessionId, e.detail?.source);
   const sid = e.sessionId ?? '----';
 
   switch (e.type) {
