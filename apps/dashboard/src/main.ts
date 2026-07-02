@@ -287,13 +287,15 @@ function filterSession(sid: string, el: HTMLElement): void {
 function ensureSessionChip(sid?: string): void {
   if (!sid || sessions.has(sid)) return;
   const idx = sessionColor(sid);
+  const ordinal = sessions.size + 1; // 按出现顺序编号,避免 id 化命名
   sessions.set(sid, idx);
   const bar = $('chipbar');
   if (!bar) return;
   const chip = document.createElement('div');
   chip.className = `chip c${idx}`;
   chip.dataset.sid = sid;
-  chip.innerHTML = `<span class="d"></span>${esc(sid)}`;
+  chip.title = sid; // 完整 id 保留在 tooltip,便于和日志对应
+  chip.innerHTML = `<span class="d"></span>会话 ${ordinal}`;
   bar.appendChild(chip);
   setStatus(true);
 }
